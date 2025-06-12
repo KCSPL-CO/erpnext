@@ -112,7 +112,7 @@
    "fieldname": "naming_series",
    "fieldtype": "Select",
    "label": "Series",
-   "options": "ACC-PAY-.YYYY.-",
+   "options": "ACC-PAY-.YYYY.-\nACC-DRUG-PAY-.YYYY.-\nACC-LAB-PAY-.YYYY.-\nACC-SERV-PAY-.YYYY.-\nACC-CONS-PAY-.YYYY.-\nACC-RAW-PAY-.YYYY.-\nACC-PROD-PAY-.YYYY.-\nACC-SUB-PAY-.YYYY.-\nACC-DEMO-PAY-.YYYY.-",
    "print_hide": 1,
    "reqd": 1,
    "set_only_once": 1
@@ -307,6 +307,7 @@
    "bold": 1,
    "fieldname": "paid_amount",
    "fieldtype": "Currency",
+   "in_list_view": 1,
    "label": "Paid Amount",
    "options": "paid_from_account_currency",
    "reqd": 1
@@ -800,7 +801,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2025-05-15 18:01:04.013025",
+ "modified": "2025-06-12 16:53:32.693306",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Entry",
