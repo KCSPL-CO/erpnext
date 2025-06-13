@@ -35,87 +35,61 @@ def authenticate_user():
 # from frappe.utils.response import build_response
 
 @frappe.whitelist(allow_guest=True)
-def create_sales_invoice():
+def createSalesInvoice():
     if frappe.request.method != "POST":
         frappe.local.response["http_status_code"] = 405
-        return {"message": "Only POST allowed", "success": False}
+        return {"error": "Only POST method allowed"}
 
     if not authenticate_user():
-        return {"message": "Unauthorized", "success": False}
+        return {"error": "Unauthorized"}
 
     try:
         data = frappe.request.get_json()
 
+        # Check and get item_code or item
+        first_item = data.get("items", [{}])[0]
+        item_code = first_item.get("item_code") or first_item.get("item")
+        naming_series = "ACC-SINV-.YYYY.-"  # default fallback series
+
+        if item_code:
+            item_group = frappe.db.get_value("Item", item_code, "item_group")
+            year = frappe.utils.now_datetime().year
+
+            series_map = {
+                "Drug": f"DRUG-SINV-{year}-",
+                "Laboratory": f"LAB-SINV-{year}-",
+                "Services": f"SERV-SINV-{year}-",
+                "Consumable": f"CONS-SINV-{year}-",
+                "Raw Material": f"RAW-SINV-{year}-",
+                "Products": f"PROD-SINV-{year}-",
+                "Sub Assemblies": f"SUB-SINV-{year}-",
+                "Demo Item Group": f"DEMO-SINV-{year}-",
+            }
+
+            if item_group in series_map:
+                naming_series = series_map[item_group]
+
+        # Now create Sales Invoice
         doc = frappe.new_doc("Sales Invoice")
-        doc.customer = data.get("customer")
-        doc.customer_name = data.get("customer_name")
-        doc.tax_id = data.get("tax_id")
-        doc.company = data.get("company")
-        doc.posting_date = data.get("posting_date")
-        doc.posting_time = data.get("posting_time")
-        doc.set_posting_time = data.get("set_posting_time", 0)
-        doc.due_date = data.get("due_date")
-        doc.patient = data.get("patient")
-        doc.patient_name = data.get("patient_name")
-        doc.ref_practitioner = data.get("ref_practitioner")
+        doc.naming_series = naming_series
+        doc.update(data)
 
-        doc.total_qty = data.get("total_qty", 0)
-        doc.total = data.get("total", 0)
-        doc.net_total = data.get("net_total", 0)
-        doc.tax_category = data.get("tax_category")
-        doc.taxes_and_charges = data.get("taxes_and_charges")
-        doc.total_taxes_and_charges = data.get("total_taxes_and_charges", 0)
-        doc.grand_total = data.get("grand_total", 0)
-        doc.rounded_total = data.get("rounded_total", 0)
-        doc.outstanding_amount = data.get("outstanding_amount", 0)
-
-        doc.apply_discount_on = data.get("apply_discount_on", "")
-        doc.additional_discount_percentage = data.get("additional_discount_percentage", 0)
-        doc.discount_amount = data.get("discount_amount", 0)
-
-        doc.is_pos = data.get("is_pos", False)
-        doc.is_return = data.get("is_return", False)
-        doc.is_debit_note = data.get("is_debit_note", False)
-        doc.update_billed_amount_in_sales_order = data.get("update_billed_amount_in_sales_order", True)
-        doc.update_billed_amount_in_delivery_note = data.get("update_billed_amount_in_delivery_note", True)
-        doc.pos_profile = data.get("pos_profile", "")
-        doc.reason_for_issuing_document = data.get("reason_for_issuing_document", "")
-        doc.return_against = data.get("return_against", "")
-
-        # Add items
-        for item in data.get("items", []):
-            doc.append("items", {
-                "item_name": item.get("item"),
-                "item_code": item.get("item"),
-                "qty": item.get("quantity"),
-                "rate": item.get("rate"),
-                "amount": item.get("amount"),
-                "uom": "Nos"
-            })
-
-        # Add taxes/charges
-        for charge in data.get("charges", []):
-            doc.append("taxes", {
-                "charge_type": charge.get("type"),
-                "account_head": charge.get("account_head"),
-                "rate": charge.get("tax_rate"),
-                "tax_amount": charge.get("amount"),
-                "total": charge.get("total")
-            })
+        # Optional: double-check naming_series didn't get overwritten
+        if not doc.naming_series:
+            doc.naming_series = naming_series
 
         doc.insert(ignore_permissions=True)
-        # doc.submit()
         frappe.db.commit()
 
         return {
-            "message": "Sales Invoice created",
-            "success": True,
-            "data": doc.as_dict()
+            "message": "Sales Invoice created successfully",
+            "name": doc.name,
+            "series_used": naming_series
         }
 
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Create Sales Invoice")
-        return {"message": str(e), "success": False}
+        frappe.log_error(frappe.get_traceback(), "Create Sales Invoice API")
+        return {"error": str(e)}
 
 # ------------------- GET ALL ---------------------
 @frappe.whitelist(allow_guest=True)
