@@ -3553,12 +3553,13 @@ def validate_and_delete_children(parent, data) -> bool:
 
 @frappe.whitelist()
 def update_child_qty_rate(parent_doctype, trans_items, parent_doctype_name, child_docname="items"):
+	import json
+
 	def check_doc_permissions(doc, perm_type="create"):
 		try:
 			doc.check_permission(perm_type)
 		except frappe.PermissionError:
 			actions = {"create": "add", "write": "update"}
-
 			frappe.throw(
 				_("You do not have permissions to {} items in a {}.").format(
 					actions[perm_type], parent_doctype
@@ -3570,18 +3571,15 @@ def update_child_qty_rate(parent_doctype, trans_items, parent_doctype_name, chil
 		workflow = get_workflow_name(doc.doctype)
 		if not workflow:
 			return
-
 		workflow_doc = frappe.get_doc("Workflow", workflow)
 		current_state = doc.get(workflow_doc.workflow_state_field)
 		roles = frappe.get_roles()
-
 		transitions = []
 		for transition in workflow_doc.transitions:
 			if transition.next_state == current_state and transition.allowed in roles:
 				if not is_transition_condition_satisfied(transition, doc):
 					continue
 				transitions.append(transition.as_dict())
-
 		if not transitions:
 			frappe.throw(
 				_("You are not allowed to update as per the conditions set in {} Workflow.").format(
@@ -3602,71 +3600,57 @@ def update_child_qty_rate(parent_doctype, trans_items, parent_doctype_name, chil
 				),
 				title=_("Invalid Qty"),
 			)
-
 		if parent_doctype == "Sales Order" and flt(new_data.get("qty")) < flt(child_item.delivered_qty):
 			frappe.throw(_("Cannot set quantity less than delivered quantity"))
-
 		if parent_doctype == "Purchase Order" and flt(new_data.get("qty")) < flt(child_item.received_qty):
 			frappe.throw(_("Cannot set quantity less than received quantity"))
 
 	def should_update_supplied_items(doc) -> bool:
-		"""Subcontracted PO can allow following changes *after submit*:
-
-		1. Change rate of subcontracting - regardless of other changes.
-		2. Change qty and/or add new items and/or remove items
-		        Exception: Transfer/Consumption is already made, qty change not allowed.
-		"""
-
 		supplied_items_processed = any(
 			item.supplied_qty or item.consumed_qty or item.returned_qty for item in doc.supplied_items
 		)
-
 		update_supplied_items = any_qty_changed or items_added_or_removed or any_conversion_factor_changed
 		if update_supplied_items and supplied_items_processed:
 			frappe.throw(_("Item qty can not be updated as raw materials are already processed."))
-
 		return update_supplied_items
 
 	def validate_fg_item_for_subcontracting(new_data, is_new):
 		if is_new:
 			if not new_data.get("fg_item"):
-				frappe.throw(
-					_("Finished Good Item is not specified for service item {0}").format(
-						new_data["item_code"]
-					)
-				)
+				frappe.throw(_("Finished Good Item is not specified for service item {0}").format(new_data["item_code"]))
 			else:
 				is_sub_contracted_item, default_bom = frappe.db.get_value(
 					"Item", new_data["fg_item"], ["is_sub_contracted_item", "default_bom"]
 				)
-
 				if not is_sub_contracted_item:
-					frappe.throw(
-						_("Finished Good Item {0} must be a sub-contracted item").format(new_data["fg_item"])
-					)
+					frappe.throw(_("Finished Good Item {0} must be a sub-contracted item").format(new_data["fg_item"]))
 				elif not default_bom:
 					frappe.throw(_("Default BOM not found for FG Item {0}").format(new_data["fg_item"]))
-
 		if not new_data.get("fg_item_qty"):
 			frappe.throw(_("Finished Good Item {0} Qty can not be zero").format(new_data["fg_item"]))
 
-	data = json.loads(trans_items)
+	# ✅ FIX: Decode only if it's a string
+	if isinstance(trans_items, str):
+		try:
+			data = json.loads(trans_items)
+		except json.JSONDecodeError as e:
+			frappe.throw(_("Invalid trans_items format. Ensure it's a valid JSON string.") + f"<br><br>{e}")
+	else:
+		data = trans_items
 
-	any_qty_changed = False  # updated to true if any item's qty changes
-	items_added_or_removed = False  # updated to true if any new item is added or removed
+	any_qty_changed = False
+	items_added_or_removed = False
 	any_conversion_factor_changed = False
 
 	parent = frappe.get_doc(parent_doctype, parent_doctype_name)
-
 	check_doc_permissions(parent, "write")
+
 	_removed_items = validate_and_delete_children(parent, data)
 	items_added_or_removed |= _removed_items
 
 	for d in data:
 		new_child_flag = False
-
 		if not d.get("item_code"):
-			# ignore empty rows
 			continue
 
 		if not d.get("docname"):
@@ -3681,98 +3665,61 @@ def update_child_qty_rate(parent_doctype, trans_items, parent_doctype_name, chil
 			prev_rate, new_rate = flt(child_item.get("rate")), flt(d.get("rate"))
 			prev_qty, new_qty = flt(child_item.get("qty")), flt(d.get("qty"))
 			prev_fg_qty, new_fg_qty = flt(child_item.get("fg_item_qty")), flt(d.get("fg_item_qty"))
-			prev_con_fac, new_con_fac = (
-				flt(child_item.get("conversion_factor")),
-				flt(d.get("conversion_factor")),
-			)
+			prev_con_fac, new_con_fac = flt(child_item.get("conversion_factor")), flt(d.get("conversion_factor"))
 			prev_uom, new_uom = child_item.get("uom"), d.get("uom")
+			prev_date = child_item.get("delivery_date") if parent_doctype == "Sales Order" else child_item.get("schedule_date")
+			new_date = d.get("delivery_date") if parent_doctype == "Sales Order" else d.get("schedule_date")
 
-			if parent_doctype == "Sales Order":
-				prev_date, new_date = child_item.get("delivery_date"), d.get("delivery_date")
-			elif parent_doctype == "Purchase Order":
-				prev_date, new_date = child_item.get("schedule_date"), d.get("schedule_date")
-
-			rate_unchanged = prev_rate == new_rate
-			qty_unchanged = prev_qty == new_qty
-			fg_qty_unchanged = prev_fg_qty == new_fg_qty
-			uom_unchanged = prev_uom == new_uom
-			conversion_factor_unchanged = prev_con_fac == new_con_fac
-			any_conversion_factor_changed |= not conversion_factor_unchanged
-			date_unchanged = (
-				prev_date == getdate(new_date) if prev_date and new_date else False
-			)  # in case of delivery note etc
-			if (
-				rate_unchanged
-				and qty_unchanged
-				and fg_qty_unchanged
-				and conversion_factor_unchanged
-				and uom_unchanged
-				and date_unchanged
-			):
+			if all([
+				prev_rate == new_rate,
+				prev_qty == new_qty,
+				prev_fg_qty == new_fg_qty,
+				prev_con_fac == new_con_fac,
+				prev_uom == new_uom,
+				prev_date == getdate(new_date) if prev_date and new_date else False,
+			]):
 				continue
 
 		validate_quantity(child_item, d)
 		if flt(child_item.get("qty")) != flt(d.get("qty")):
 			any_qty_changed = True
 
-		if (
-			parent.doctype == "Purchase Order"
-			and parent.is_subcontracted
-			and not parent.is_old_subcontracting_flow
-		):
+		if parent.doctype == "Purchase Order" and parent.is_subcontracted and not parent.is_old_subcontracting_flow:
 			validate_fg_item_for_subcontracting(d, new_child_flag)
 			child_item.fg_item_qty = flt(d["fg_item_qty"])
-
 			if new_child_flag:
 				child_item.fg_item = d["fg_item"]
 
 		child_item.qty = flt(d.get("qty"))
-		rate_precision = child_item.precision("rate") or 2
-		conv_fac_precision = child_item.precision("conversion_factor") or 2
-		qty_precision = child_item.precision("qty") or 2
-
-		# Amount cannot be lesser than billed amount, except for negative amounts
-		row_rate = flt(d.get("rate"), rate_precision)
-		amount_below_billed_amt = flt(child_item.billed_amt, rate_precision) > flt(
-			row_rate * flt(d.get("qty"), qty_precision), rate_precision
+		child_item.rate = flt(d.get("rate"), child_item.precision("rate") or 2)
+		child_item.conversion_factor = (
+			flt(d.get("conversion_factor"), child_item.precision("conversion_factor") or 2)
+			if child_item.stock_uom != child_item.uom else 1
 		)
-		if amount_below_billed_amt and row_rate > 0.0:
-			frappe.throw(
-				_(
-					"Row #{0}: Cannot set Rate if the billed amount is greater than the amount for Item {1}."
-				).format(child_item.idx, child_item.item_code)
-			)
-		else:
-			child_item.rate = row_rate
-
-		if d.get("conversion_factor"):
-			if child_item.stock_uom == child_item.uom:
-				child_item.conversion_factor = 1
-			else:
-				child_item.conversion_factor = flt(d.get("conversion_factor"), conv_fac_precision)
 
 		if d.get("uom"):
 			child_item.uom = d.get("uom")
-			conversion_factor = flt(
-				get_conversion_factor(child_item.item_code, child_item.uom).get("conversion_factor")
-			)
 			child_item.conversion_factor = (
-				flt(d.get("conversion_factor"), conv_fac_precision) or conversion_factor
+				flt(d.get("conversion_factor"), child_item.precision("conversion_factor") or 2)
+				or flt(get_conversion_factor(child_item.item_code, child_item.uom).get("conversion_factor"))
 			)
-
+		# ✅ Add reference fields here
+		if d.get("reference_dt"):
+			child_item.reference_dt = d.get("reference_dt")
+		if d.get("reference_dn"):
+			child_item.reference_dn = d.get("reference_dn")
+			
 		if d.get("delivery_date") and parent_doctype == "Sales Order":
 			child_item.delivery_date = d.get("delivery_date")
-
 		if d.get("schedule_date") and parent_doctype == "Purchase Order":
 			child_item.schedule_date = d.get("schedule_date")
 
 		if d.get("bom_no") and parent_doctype == "Sales Order":
 			child_item.bom_no = d.get("bom_no")
 
+		# Handle pricing/margin logic
 		if flt(child_item.price_list_rate):
 			if flt(child_item.rate) > flt(child_item.price_list_rate):
-				#  if rate is greater than price_list_rate, set margin
-				#  or set discount
 				child_item.discount_percentage = 0
 				child_item.margin_type = "Amount"
 				child_item.margin_rate_or_amount = flt(
@@ -3803,14 +3750,17 @@ def update_child_qty_rate(parent_doctype, trans_items, parent_doctype_name, chil
 	parent.set_qty_as_per_stock_uom()
 	parent.calculate_taxes_and_totals()
 	parent.set_total_in_words()
+
 	if parent_doctype == "Sales Order":
 		make_packing_list(parent)
 		parent.set_gross_profit()
+
 	frappe.get_doc("Authorization Control").validate_approving_authority(
 		parent.doctype, parent.company, parent.base_grand_total
 	)
 
 	parent.set_payment_schedule()
+
 	if parent_doctype == "Purchase Order":
 		parent.validate_minimum_order_qty()
 		parent.validate_budget()
@@ -3819,7 +3769,6 @@ def update_child_qty_rate(parent_doctype, trans_items, parent_doctype_name, chil
 	else:
 		parent.check_credit_limit()
 
-	# reset index of child table
 	for idx, row in enumerate(parent.get(child_docname), start=1):
 		row.idx = idx
 
@@ -3827,10 +3776,8 @@ def update_child_qty_rate(parent_doctype, trans_items, parent_doctype_name, chil
 
 	if parent_doctype == "Purchase Order":
 		update_last_purchase_rate(parent, is_submit=1)
-
 		if any_qty_changed or items_added_or_removed or any_conversion_factor_changed:
 			parent.update_prevdoc_status()
-
 		parent.update_requested_qty()
 		parent.update_ordered_qty()
 		parent.update_ordered_and_reserved_qty()
@@ -3845,11 +3792,11 @@ def update_child_qty_rate(parent_doctype, trans_items, parent_doctype_name, chil
 			else:
 				if not parent.can_update_items():
 					frappe.throw(
-						_(
-							"Items cannot be updated as Subcontracting Order is created against the Purchase Order {0}."
-						).format(frappe.bold(parent.name))
+						_("Items cannot be updated as Subcontracting Order is created against the Purchase Order {0}.").format(
+							frappe.bold(parent.name)
+						)
 					)
-	else:  # Sales Order
+	else:
 		parent.validate_for_duplicate_items()
 		parent.validate_warehouse()
 		parent.update_reserved_qty()
@@ -3859,27 +3806,21 @@ def update_child_qty_rate(parent_doctype, trans_items, parent_doctype_name, chil
 
 	parent.reload()
 	validate_workflow_conditions(parent)
-
 	parent.update_blanket_order()
 	parent.update_billing_percentage()
 	parent.set_status()
-
 	parent.validate_uom_is_integer("uom", "qty")
 	parent.validate_uom_is_integer("stock_uom", "stock_qty")
 
-	# Cancel and Recreate Stock Reservation Entries.
 	if parent_doctype == "Sales Order":
 		from erpnext.stock.doctype.stock_reservation_entry.stock_reservation_entry import (
 			cancel_stock_reservation_entries,
 			has_reserved_stock,
 		)
-
 		if has_reserved_stock(parent.doctype, parent.name):
 			cancel_stock_reservation_entries(parent.doctype, parent.name)
-
 			if parent.per_picked == 0:
 				parent.create_stock_reservation_entries()
-
 
 def check_if_child_table_updated(child_table_before_update, child_table_after_update, fields_to_check):
 	fields_to_check = list(fields_to_check) + get_accounting_dimensions() + ["cost_center", "project"]

@@ -53,25 +53,202 @@ def listSalesInvoices():
         return {"error": str(e)}
 
 # 2. Create Sales Invoice
+# @frappe.whitelist(allow_guest=True)
+# def createSalesInvoice():
+#     if frappe.request.method != "POST":
+#         frappe.local.response["http_status_code"] = 405
+#         return {"error": "Only POST method allowed"}
+
+#     if not authenticate_user():
+#         return {"error": "Unauthorized"}
+
+#     data = frappe.request.get_json()
+#     try:
+#         doc = frappe.new_doc("Sales Invoice")
+#         doc.update(data)
+#         doc.insert(ignore_permissions=True)
+#         frappe.db.commit()
+#         return {"message": "Sales Invoice created successfully", "name": doc.name}
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), "Create Sales Invoice API")
+#         return {"error": str(e)}
+
 @frappe.whitelist(allow_guest=True)
 def createSalesInvoice():
     if frappe.request.method != "POST":
         frappe.local.response["http_status_code"] = 405
         return {"error": "Only POST method allowed"}
-
+ 
     if not authenticate_user():
         return {"error": "Unauthorized"}
-
-    data = frappe.request.get_json()
+ 
     try:
+        data = frappe.request.get_json()
+ 
+        item_codes = [
+            item.get("item_code") or item.get("item")
+            for item in data.get("items", [])
+        ]
+        item_groups = []
+ 
+        for item_code in item_codes:
+            if item_code:
+                group = frappe.db.get_value("Item", item_code, "item_group")
+                if group:
+                    item_groups.append(group)
+ 
+        unique_groups = set(item_groups)
+        year = frappe.utils.now_datetime().year
+ 
+        # Define mapping from item_group to naming series
+        series_map = {
+            "Drug": f"DRUG-SINV-{year}-",
+            "Laboratory": f"LAB-SINV-{year}-",
+            "Services": f"SERV-SINV-{year}-",
+            "Consumable": f"CONS-SINV-{year}-",
+            "Raw Material": f"RAW-SINV-{year}-",
+            "Products": f"PROD-SINV-{year}-",
+            "Sub Assemblies": f"SUB-SINV-{year}-",
+            "Demo Item Group": f"DEMO-SINV-{year}-",
+        }
+ 
+        # Determine final series
+        if len(unique_groups) == 1:
+            group = list(unique_groups)[0]
+            naming_series = series_map.get(group, f"ACC-SINV-.YYYY.-")
+        else:
+            naming_series = f"ACC-SINV-.YYYY.-"  # fallback for multiple/missing groups
+ 
+        # Create Sales Invoice
         doc = frappe.new_doc("Sales Invoice")
+        doc.naming_series = naming_series
         doc.update(data)
+ 
+        # Ensure naming_series is not overwritten
+        if not doc.naming_series:
+            doc.naming_series = naming_series
+ 
         doc.insert(ignore_permissions=True)
         frappe.db.commit()
-        return {"message": "Sales Invoice created successfully", "name": doc.name}
+ 
+        return {
+            "message": "Sales Invoice created successfully",
+            "name": doc.name,
+            "series_used": naming_series
+        }
+ 
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Create Sales Invoice API")
         return {"error": str(e)}
+
+
+@frappe.whitelist(allow_guest=True)
+def create_sales_invoice():
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"message": "Only POST allowed", "success": False}
+ 
+    if not authenticate_user():
+        return {"message": "Unauthorized", "success": False}
+ 
+    try:
+        data = frappe.request.get_json()
+ 
+        # Default series
+        naming_series = "ACC-SINV-.YYYY.-"
+ 
+        # Determine series from first item's item_group
+        first_item_code = data.get("items", [{}])[0].get("item")
+        if first_item_code:
+            item_group = frappe.db.get_value("Item", {"item_code": first_item_code}, "item_group")
+ 
+            year = frappe.utils.now_datetime().year
+            series_map = {
+                "Drug": f"DRUG-SINV-{year}-",
+                "Laboratory": f"LAB-SINV-{year}-",
+                "Services": f"SERV-SINV-{year}-",
+                "Consumable": f"CONS-SINV-{year}-",
+                "Raw Material": f"RAW-SINV-{year}-",
+                "Products": f"PROD-SINV-{year}-",
+                "Sub Assemblies": f"SUB-SINV-{year}-",
+                "Demo Item Group": f"DEMO-SINV-{year}-",
+            }
+ 
+            if item_group in series_map:
+                naming_series = series_map[item_group]
+ 
+        doc = frappe.new_doc("Sales Invoice")
+        doc.naming_series = naming_series
+        doc.customer = data.get("customer")
+        doc.customer_name = data.get("customer_name")
+        doc.tax_id = data.get("tax_id")
+        doc.company = data.get("company")
+        doc.posting_date = data.get("posting_date")
+        doc.posting_time = data.get("posting_time")
+        doc.set_posting_time = data.get("set_posting_time", 0)
+        doc.due_date = data.get("due_date")
+        doc.patient = data.get("patient")
+        doc.patient_name = data.get("patient_name")
+        doc.ref_practitioner = data.get("ref_practitioner")
+ 
+        doc.total_qty = data.get("total_qty", 0)
+        doc.total = data.get("total", 0)
+        doc.net_total = data.get("net_total", 0)
+        doc.tax_category = data.get("tax_category")
+        doc.taxes_and_charges = data.get("taxes_and_charges")
+        doc.total_taxes_and_charges = data.get("total_taxes_and_charges", 0)
+        doc.grand_total = data.get("grand_total", 0)
+        doc.rounded_total = data.get("rounded_total", 0)
+        doc.outstanding_amount = data.get("outstanding_amount", 0)
+ 
+        doc.apply_discount_on = data.get("apply_discount_on", "")
+        doc.additional_discount_percentage = data.get("additional_discount_percentage", 0)
+        doc.discount_amount = data.get("discount_amount", 0)
+ 
+        doc.is_pos = data.get("is_pos", False)
+        doc.is_return = data.get("is_return", False)
+        doc.is_debit_note = data.get("is_debit_note", False)
+        doc.update_billed_amount_in_sales_order = data.get("update_billed_amount_in_sales_order", True)
+        doc.update_billed_amount_in_delivery_note = data.get("update_billed_amount_in_delivery_note", True)
+        doc.pos_profile = data.get("pos_profile", "")
+        doc.reason_for_issuing_document = data.get("reason_for_issuing_document", "")
+        doc.return_against = data.get("return_against", "")
+ 
+        # Add items
+        for item in data.get("items", []):
+            doc.append("items", {
+                "item_name": item.get("item_name"),
+                "item_code": item.get("item_code"),
+                "qty": item.get("qty"),
+                "rate": item.get("rate"),
+                "amount": item.get("amount"),
+                "income_account": item.get("income_account"),
+                "uom": "Nos"
+            })
+ 
+        # Add taxes/charges
+        for charge in data.get("charges", []):
+            doc.append("taxes", {
+                "charge_type": charge.get("type"),
+                "account_head": charge.get("account_head"),
+                "rate": charge.get("tax_rate"),
+                "tax_amount": charge.get("amount"),
+                "total": charge.get("total")
+            })
+ 
+        doc.insert(ignore_permissions=True)
+        # doc.submit()  # Uncomment if you want auto-submission
+        frappe.db.commit()
+ 
+        return {
+            "message": "Sales Invoice created",
+            "success": True,
+            "data": doc.as_dict()
+        }
+ 
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Create Sales Invoice")
+        return {"message": str(e), "success": False}
 
 # 3. Update Sales Invoice
 @frappe.whitelist(allow_guest=True)
@@ -102,7 +279,6 @@ def updateSalesInvoice():
         frappe.log_error(frappe.get_traceback(), "Update Sales Invoice API")
         return {"error": str(e)}
     
-
 # updateAndSubmitSalesInvoice
 @frappe.whitelist(allow_guest=True)
 def updateAndSubmitSalesInvoice():
@@ -120,30 +296,50 @@ def updateAndSubmitSalesInvoice():
         return {"error": "Missing Sales Invoice ID"}
 
     try:
-        # Get the Sales Invoice document
         doc = frappe.get_doc("Sales Invoice", invoice_name)
-
-        # Optional: update fields if provided
         doc.update(data)
-
-        # Submit the invoice
         doc.save(ignore_permissions=True)
         doc.submit()
 
-        # Update reference documents
         for item in doc.items:
             ref_dt = item.get("reference_dt")
             ref_dn = item.get("reference_dn")
 
             if ref_dt and ref_dn:
-                if ref_dt == "Patient Appointment":
+                if ref_dt == "Patient Appointment" or ref_dt == "Patient Encounter":
                     frappe.db.set_value(ref_dt, ref_dn, "invoiced", 1)
-                elif ref_dt == "Patient Encounter":
-                    frappe.db.set_value(ref_dt, ref_dn, "invoiced", 1)
+
                 elif ref_dt == "Service Request":
                     frappe.db.set_value(ref_dt, ref_dn, "billing_status", "Invoiced")
+                    if doc.get("customer_token"):
+                        frappe.db.set_value(ref_dt, ref_dn, "token", doc.customer_token)
+
                 elif ref_dt == "Medication Request":
-                    frappe.db.set_value(ref_dt, ref_dn, "billing_status", "Invoiced")
+                    # Get the Medication Request document
+                    med_req = frappe.get_doc("Medication Request", ref_dn)
+
+                    # Determine qty to add
+                    qty = item.get("qty") or 0
+                    qty_invoiced = (med_req.qty_invoiced or 0) + qty
+
+                    # Calculate status
+                    if qty_invoiced == 0:
+                        status = "Pending"
+                    elif med_req.number_of_repeats_allowed and med_req.total_dispensable_quantity:
+                        if qty_invoiced < med_req.total_dispensable_quantity:
+                            status = "Partly Invoiced"
+                        else:
+                            status = "Invoiced"
+                    else:
+                        if qty_invoiced < med_req.quantity:
+                            status = "Partly Invoiced"
+                        else:
+                            status = "Invoiced"
+
+                    # Update the Medication Request
+                    med_req.qty_invoiced = qty_invoiced
+                    med_req.billing_status = status
+                    med_req.save(ignore_permissions=True)
 
         frappe.db.commit()
 
@@ -159,6 +355,7 @@ def updateAndSubmitSalesInvoice():
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Update Sales Invoice API")
         return {"error": str(e)}
+
 
 # 4. Delete Sales Invoice
 @frappe.whitelist(allow_guest=True)
@@ -355,9 +552,21 @@ def get_items_from_healthcare(patient=None, customer=None, company=None, item_ty
             try:
                 if reference_type == "Service Request":
                     doc = frappe.get_doc("Service Request", reference_name)
+                    doc = frappe.get_doc("Service Request", reference_name)
+
                     item["service_type"] = doc.template_dt
+                    item["order_group"] = doc.order_group
+                    item["order_date"] = doc.order_date
                     item["practitioner"] = doc.practitioner
                     item["practitioner_name"] = doc.practitioner_name
+
+                    # ✅ Fetch token from Patient Encounter using order_group
+                    token = frappe.db.get_value("Patient Encounter", {"name": doc.order_group}, "token")
+
+                    if token:
+                        item["token"] = token
+                    else:
+                        item["token"] = "-"
 
                     # Fetch rate based on service_type
                     service_name = service

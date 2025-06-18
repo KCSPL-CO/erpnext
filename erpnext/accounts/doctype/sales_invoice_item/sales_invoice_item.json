@@ -109,6 +109,7 @@
   "column_break_vwhb",
   "pos_invoice",
   "pos_invoice_item",
+  "delivered_date",
   "internal_transfer_section",
   "purchase_order",
   "column_break_92",
@@ -978,18 +979,24 @@
    "options": "POS Invoice",
    "print_hide": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "delivered_date",
+   "fieldtype": "Datetime",
+   "label": "Delivered Date"
   }
  ],
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-03-12 16:33:55.503777",
+ "modified": "2025-06-12 17:51:38.570353",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice Item",
  "naming_rule": "Random",
  "owner": "Administrator",
  "permissions": [],
+ "row_format": "Dynamic",
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": []

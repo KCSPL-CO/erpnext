@@ -14,6 +14,7 @@
   "tax_id",
   "company",
   "company_tax_id",
+  "customer_token",
   "column_break1",
   "posting_date",
   "posting_time",
@@ -2175,6 +2176,12 @@
    "label": "Company Contact Person",
    "options": "Contact",
    "print_hide": 1
+  },
+  {
+   "fieldname": "customer_token",
+   "fieldtype": "Data",
+   "label": "Customer Token",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
@@ -2188,7 +2195,7 @@
    "link_fieldname": "consolidated_invoice"
   }
  ],
- "modified": "2025-06-12 16:51:39.294373",
+ "modified": "2025-06-16 13:04:31.735251",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice",

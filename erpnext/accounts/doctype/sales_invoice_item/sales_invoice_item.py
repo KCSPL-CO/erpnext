@@ -34,6 +34,7 @@ class SalesInvoiceItem(Document):
 		customer_item_code: DF.Data | None
 		deferred_revenue_account: DF.Link | None
 		delivered_by_supplier: DF.Check
+		delivered_date: DF.Datetime | None
 		delivered_qty: DF.Float
 		delivery_note: DF.Link | None
 		description: DF.TextEditor | None

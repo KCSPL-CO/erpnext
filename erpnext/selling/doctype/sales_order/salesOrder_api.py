@@ -71,7 +71,7 @@ def get_sales_order_list():
 
 			# Optional: Linked documents
 			order["delivery_notes"] = frappe.get_all("Delivery Note Item", filters={"against_sales_order": order.name}, fields=["parent"])
-			order["invoices"] = frappe.get_all("Sales Invoice Item", filters={"sales_order": order.name}, fields=["parent"])
+			order["invoices"] = frappe.get_all("Sales Order Item", filters={"sales_order": order.name}, fields=["parent"])
 			order["payments"] = frappe.get_all("Payment Entry Reference", filters={"reference_name": order.name}, fields=["parent"])
 
 		return {
@@ -148,6 +148,84 @@ def create_sales_order():
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Create Sales Order API Error")
 		return {"error": str(e)}
+
+@frappe.whitelist()
+def get_sales_order_details():
+    # Allow only POST method
+    if frappe.request.method != "GET":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only GET method allowed"}
+
+    # Custom authentication check (you should define this function)
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+
+    try:
+        data = frappe.request.get_json()
+    except Exception as e:
+        frappe.local.response["http_status_code"] = 400
+        return {"error": f"Invalid JSON: {str(e)}"}
+
+    order_id = data.get("name") or data.get("id")
+    if not order_id:
+        frappe.local.response["http_status_code"] = 400
+        return {"error": "Missing Sales Order ID"}
+
+    try:
+        sales_order = frappe.get_doc("Sales Order", order_id)
+    except frappe.DoesNotExistError:
+        frappe.local.response["http_status_code"] = 404
+        return {"error": f"Sales Order {order_id} not found"}
+
+    return {
+        "name": sales_order.name,
+        "parent_doctype": sales_order.doctype,
+        "items": sales_order.items
+    }
+
+# updateAndSubmitSalesInvoice
+@frappe.whitelist(allow_guest=True)
+def update_and_submit_sales_order():
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+
+    if not authenticate_user():
+        return {"error": "Unauthorized"}
+
+    data = frappe.request.get_json()
+    invoice_name = data.get("name") or data.get("id")
+
+    if not invoice_name:
+        return {"error": "Missing Sales Order ID"}
+
+    try:
+        # Get the Sales Order document
+        doc = frappe.get_doc("Sales Order", invoice_name)
+
+        # Optional: update fields if provided
+        doc.update(data)
+
+        # Submit the invoice
+        doc.save(ignore_permissions=True)
+        doc.submit()
+
+        frappe.db.commit()
+
+        return {
+            "message": "Sales Order submitted and references updated successfully",
+            "updated_data": doc.as_dict()
+        }
+
+    except frappe.DoesNotExistError:
+        frappe.local.response["http_status_code"] = 404
+        return {"error": "Sales Order not found"}
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Update Sales Order API")
+        return {"error": str(e)}
+
 
 
 @frappe.whitelist(allow_guest=True)
