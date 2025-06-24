@@ -24,6 +24,36 @@ def authenticate_user():
 
 	return user
 
+@frappe.whitelist(allow_guest=True)
+def filter_get_sales_order_details():
+	# Only allow GET
+	if frappe.request.method != "GET":
+		frappe.local.response["http_status_code"] = 405
+		return {"error": "Only GET method allowed"}
+
+	# Authenticate
+	if not authenticate_user():
+		return {"error": "Unauthorized"}
+
+	# Get Sales Order ID from query string (?id=...)
+	order_id = frappe.request.args.get("id")
+	if not order_id:
+		frappe.local.response["http_status_code"] = 400
+		return {"error": "Missing Sales Order ID"}
+
+	try:
+		sales_order = frappe.get_doc("Sales Order", order_id)
+	except frappe.DoesNotExistError:
+		frappe.local.response["http_status_code"] = 404
+		return {"error": f"Sales Order {order_id} not found"}
+
+	return {
+		"message": {
+			"name": sales_order.name,
+			"parent_doctype": sales_order.doctype,
+			"items": sales_order.items
+		}
+	}
 
 @frappe.whitelist(allow_guest=True)
 def get_sales_order_list():
@@ -87,6 +117,35 @@ def get_sales_order_list():
 		return {"error": str(e)}
 
 
+
+
+@frappe.whitelist(allow_guest=True)
+def create_sales_order():
+	if frappe.request.method != "POST":
+		frappe.local.response["http_status_code"] = 405
+		return {"error": "Only POST method allowed"}
+
+	if not authenticate_user():
+		return {"error": "Unauthorized"}
+
+	data = frappe.request.get_json()
+	required_fields = ["customer", "transaction_date", "items"]
+	for field in required_fields:
+		if not data.get(field):
+			return {"error": f"Missing required field: {field}"}
+
+	try:
+		doc = frappe.get_doc({
+			"doctype": "Sales Order",
+			**data
+		})
+		doc.insert(ignore_permissions=True)
+		frappe.db.commit()
+		return {"message": "Sales Order created", "id": doc.name}
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Create Sales Order API Error")
+		return {"error": str(e)}
+	
 @frappe.whitelist(allow_guest=True)
 def get_sales_order_details():
 	if frappe.request.method != "POST":
@@ -122,67 +181,6 @@ def get_sales_order_details():
 		return {"error": str(e)}
 
 
-@frappe.whitelist(allow_guest=True)
-def create_sales_order():
-	if frappe.request.method != "POST":
-		frappe.local.response["http_status_code"] = 405
-		return {"error": "Only POST method allowed"}
-
-	if not authenticate_user():
-		return {"error": "Unauthorized"}
-
-	data = frappe.request.get_json()
-	required_fields = ["customer", "transaction_date", "items"]
-	for field in required_fields:
-		if not data.get(field):
-			return {"error": f"Missing required field: {field}"}
-
-	try:
-		doc = frappe.get_doc({
-			"doctype": "Sales Order",
-			**data
-		})
-		doc.insert(ignore_permissions=True)
-		frappe.db.commit()
-		return {"message": "Sales Order created", "id": doc.name}
-	except Exception as e:
-		frappe.log_error(frappe.get_traceback(), "Create Sales Order API Error")
-		return {"error": str(e)}
-
-@frappe.whitelist()
-def get_sales_order_details():
-    # Allow only POST method
-    if frappe.request.method != "GET":
-        frappe.local.response["http_status_code"] = 405
-        return {"error": "Only GET method allowed"}
-
-    # Custom authentication check (you should define this function)
-    if not authenticate_user():
-        frappe.local.response["http_status_code"] = 401
-        return {"error": "Unauthorized"}
-
-    try:
-        data = frappe.request.get_json()
-    except Exception as e:
-        frappe.local.response["http_status_code"] = 400
-        return {"error": f"Invalid JSON: {str(e)}"}
-
-    order_id = data.get("name") or data.get("id")
-    if not order_id:
-        frappe.local.response["http_status_code"] = 400
-        return {"error": "Missing Sales Order ID"}
-
-    try:
-        sales_order = frappe.get_doc("Sales Order", order_id)
-    except frappe.DoesNotExistError:
-        frappe.local.response["http_status_code"] = 404
-        return {"error": f"Sales Order {order_id} not found"}
-
-    return {
-        "name": sales_order.name,
-        "parent_doctype": sales_order.doctype,
-        "items": sales_order.items
-    }
 
 # updateAndSubmitSalesInvoice
 @frappe.whitelist(allow_guest=True)

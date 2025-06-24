@@ -1,6 +1,7 @@
 import frappe
 from frappe import _
 import base64
+from frappe.utils import add_days, cint, cstr, flt, formatdate, get_link_to_form, getdate, nowdate
 
 # Authentication helper
 def authenticate_user():
@@ -298,15 +299,55 @@ def updateAndSubmitSalesInvoice():
     try:
         doc = frappe.get_doc("Sales Invoice", invoice_name)
         doc.update(data)
+        
+        # Handle POS specific updates
+        if cint(doc.get("is_pos")) == 1 and not doc.is_return:
+            # Ensure payments are properly set for POS
+            if not doc.get("payments"):
+                if doc.pos_profile:
+                    update_multi_mode_option(doc, frappe.get_doc("POS Profile", doc.pos_profile))
+                else:
+                    # Fallback to default POS profile if not specified
+                    from erpnext.stock.get_item_details import get_pos_profile
+                    pos_profile = get_pos_profile(doc.company) or {}
+                    if pos_profile:
+                        doc.pos_profile = pos_profile.get("name")
+                        update_multi_mode_option(doc, frappe.get_doc("POS Profile", doc.pos_profile))
+            
+            # Calculate total payments safely
+            total_payments = sum(flt(payment.amount) for payment in doc.payments if payment.amount is not None)
+            
+            # If payments cover the full amount, mark as paid
+            if abs(total_payments) >= abs(flt(doc.grand_total)):
+                doc.paid_amount = flt(doc.grand_total)
+                doc.base_paid_amount = flt(doc.base_grand_total)
+                doc.outstanding_amount = 0
+                doc.status = "Paid"  # Explicitly set status
+            else:
+                # If payments don't cover full amount, calculate outstanding
+                doc.outstanding_amount = flt(doc.grand_total) - flt(total_payments)
+                doc.status = "Partly Paid" if doc.outstanding_amount > 0 else "Paid"
+
         doc.save(ignore_permissions=True)
         doc.submit()
 
+        # Force status update for POS invoices if still not marked as Paid
+        if cint(doc.get("is_pos")) == 1 and not doc.is_return and doc.status != "Paid":
+            frappe.db.set_value("Sales Invoice", doc.name, {
+                "status": "Paid",
+                "outstanding_amount": 0,
+                "paid_amount": doc.grand_total,
+                "base_paid_amount": doc.base_grand_total
+            }, update_modified=False)
+            doc.reload()
+
+        # Update referenced documents
         for item in doc.items:
             ref_dt = item.get("reference_dt")
             ref_dn = item.get("reference_dn")
 
             if ref_dt and ref_dn:
-                if ref_dt == "Patient Appointment" or ref_dt == "Patient Encounter":
+                if ref_dt in ["Patient Appointment", "Patient Encounter"]:
                     frappe.db.set_value(ref_dt, ref_dn, "invoiced", 1)
 
                 elif ref_dt == "Service Request":
@@ -315,28 +356,17 @@ def updateAndSubmitSalesInvoice():
                         frappe.db.set_value(ref_dt, ref_dn, "token", doc.customer_token)
 
                 elif ref_dt == "Medication Request":
-                    # Get the Medication Request document
                     med_req = frappe.get_doc("Medication Request", ref_dn)
+                    qty = flt(item.get("qty")) or 0
+                    qty_invoiced = (flt(med_req.qty_invoiced) or 0) + qty
 
-                    # Determine qty to add
-                    qty = item.get("qty") or 0
-                    qty_invoiced = (med_req.qty_invoiced or 0) + qty
-
-                    # Calculate status
                     if qty_invoiced == 0:
                         status = "Pending"
                     elif med_req.number_of_repeats_allowed and med_req.total_dispensable_quantity:
-                        if qty_invoiced < med_req.total_dispensable_quantity:
-                            status = "Partly Invoiced"
-                        else:
-                            status = "Invoiced"
+                        status = "Partly Invoiced" if qty_invoiced < flt(med_req.total_dispensable_quantity) else "Invoiced"
                     else:
-                        if qty_invoiced < med_req.quantity:
-                            status = "Partly Invoiced"
-                        else:
-                            status = "Invoiced"
+                        status = "Partly Invoiced" if qty_invoiced < flt(med_req.quantity) else "Invoiced"
 
-                    # Update the Medication Request
                     med_req.qty_invoiced = qty_invoiced
                     med_req.billing_status = status
                     med_req.save(ignore_permissions=True)
@@ -345,7 +375,13 @@ def updateAndSubmitSalesInvoice():
 
         return {
             "message": "Sales Invoice submitted and references updated successfully",
-            "updated_data": doc.as_dict()
+            "updated_data": doc.as_dict(),
+            "is_pos": doc.get("is_pos"),
+            "status": doc.status,
+            "outstanding_amount": doc.outstanding_amount,
+            "paid_amount": doc.paid_amount,
+            "grand_total": doc.grand_total,
+            "total_payments": total_payments if cint(doc.get("is_pos")) == 1 else None
         }
 
     except frappe.DoesNotExistError:
@@ -354,7 +390,57 @@ def updateAndSubmitSalesInvoice():
 
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Update Sales Invoice API")
-        return {"error": str(e)}
+        return {"error": str(e)}  
+
+def update_multi_mode_option(doc, pos_profile):
+	def append_payment(payment_mode):
+		payment = doc.append("payments", {})
+		payment.default = payment_mode.default
+		payment.mode_of_payment = payment_mode.mop
+		payment.account = payment_mode.default_account
+		payment.type = payment_mode.type
+
+	doc.set("payments", [])
+	invalid_modes = []
+	mode_of_payments = [d.mode_of_payment for d in pos_profile.get("payments")]
+	mode_of_payments_info = get_mode_of_payments_info(mode_of_payments, doc.company)
+
+	for row in pos_profile.get("payments"):
+		payment_mode = mode_of_payments_info.get(row.mode_of_payment)
+		if not payment_mode:
+			invalid_modes.append(get_link_to_form("Mode of Payment", row.mode_of_payment))
+			continue
+
+		payment_mode.default = row.default
+		append_payment(payment_mode)
+
+	if invalid_modes:
+		if invalid_modes == 1:
+			msg = _("Please set default Cash or Bank account in Mode of Payment {}")
+		else:
+			msg = _("Please set default Cash or Bank account in Mode of Payments {}")
+		frappe.throw(msg.format(", ".join(invalid_modes)), title=_("Missing Account"))
+
+def get_mode_of_payments_info(mode_of_payments, company):
+	data = frappe.db.sql(
+		"""
+		select
+			mpa.default_account, mpa.parent as mop, mp.type as type
+		from
+			`tabMode of Payment Account` mpa,`tabMode of Payment` mp
+		where
+			mpa.parent = mp.name and
+			mpa.company = %s and
+			mp.enabled = 1 and
+			mp.name in %s
+		group by
+			mp.name
+		""",
+		(company, mode_of_payments),
+		as_dict=1,
+	)
+
+	return {row.get("mop"): row for row in data}
 
 
 # 4. Delete Sales Invoice

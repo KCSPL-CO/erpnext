@@ -20,6 +20,7 @@
   "column_break_7",
   "transaction_date",
   "delivery_date",
+  "inpatient_record",
   "column_break1",
   "po_no",
   "po_date",
@@ -1658,13 +1659,19 @@
    "hidden": 1,
    "label": "Has Unit Price Items",
    "no_copy": 1
+  },
+  {
+   "fieldname": "inpatient_record",
+   "fieldtype": "Link",
+   "label": "Inpatient Record",
+   "options": "Inpatient Record"
   }
  ],
  "icon": "fa fa-file-text",
  "idx": 105,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-03-03 16:49:00.676927",
+ "modified": "2025-06-21 11:34:56.128203",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Sales Order",
