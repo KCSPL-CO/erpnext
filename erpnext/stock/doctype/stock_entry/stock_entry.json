@@ -55,6 +55,7 @@
   "get_stock_and_rate",
   "section_break_19",
   "total_outgoing_value",
+  "total_item_qty",
   "column_break_22",
   "total_incoming_value",
   "value_difference",
@@ -690,6 +691,11 @@
    "fieldtype": "Tab Break",
    "label": "Connections",
    "show_dashboard": 1
+  },
+  {
+    "fieldname": "total_item_qty",
+    "fieldtype": "Data",
+    "label": "Total Item Quantity"
   }
  ],
  "icon": "fa fa-file-text",
@@ -763,6 +769,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "posting_date, from_warehouse, to_warehouse, purpose, remarks",
  "show_name_in_global_search": 1,
  "sort_field": "modified",
