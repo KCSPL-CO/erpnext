@@ -45,7 +45,7 @@ def listSalesInvoices():
                 "posting_date", "due_date", "status", "grand_total", "currency"
             ],
             order_by="posting_date desc",
-            limit_page_length=20
+            # limit_page_length=20
         )
         return {"message": sales_invoices}
     except Exception as e:
@@ -83,7 +83,7 @@ def list_payment_entries():
             "naming_series", "party", "party_type"
         ],
         order_by="posting_date desc",
-        limit_page_length=100
+        # limit_page_length=100
     )
 
     # Aggregation

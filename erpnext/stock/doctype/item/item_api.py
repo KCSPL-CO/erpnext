@@ -52,7 +52,7 @@ def listItems():
 				"item_name",
 				"item_group",
 				"standard_rate",
-				"disabled as status"  # ✅ This maps "disabled" field as "status"
+				"disabled as status"  # This maps "disabled" field as "status"
 			],
 			order_by="creation desc",
 			# limit_page_length=20
@@ -117,7 +117,7 @@ def filterItems():
 			filters=filters,
 			fields=["name", "item_code", "item_name", "item_group", "stock_uom"],
 			order_by="creation desc",
-			limit_page_length=20,
+			# limit_page_length=20,
 		)
 		return {"message": items}
 	except Exception as e:
@@ -222,7 +222,7 @@ def listItemGroups():
             "Item Group",
             fields=["name", "parent_item_group", "is_group"],
             order_by="creation desc",
-            limit_page_length=20
+            # limit_page_length=20
         )
         return {"message": item_groups}
     except Exception as e:
@@ -346,7 +346,7 @@ def listMaterialRequests():
 			"Material Request",
 			fields=["name", "material_request_type", "status", "transaction_date", "company"],
 			order_by="creation desc",
-			limit_page_length=20
+			# limit_page_length=20
 		)
 		return {"message": mr_list}
 	except Exception as e:
@@ -393,7 +393,7 @@ def filterMaterialRequests():
 			filters=filters,
 			fields=["name", "material_request_type", "status", "transaction_date"],
 			order_by="creation desc",
-			limit_page_length=20,
+			# limit_page_length=20,
 		)
 		return {"message": mr_list}
 	except Exception as e:
@@ -488,7 +488,7 @@ def listStockEntries():
 			"Stock Entry",
 			fields=["name", "purpose", "stock_entry_type", "posting_date", "company"],
 			order_by="creation desc",
-			limit_page_length=20
+			# limit_page_length=20
 		)
 		return {"message": se_list}
 	except Exception as e:
@@ -535,7 +535,7 @@ def filterStockEntries():
 			filters=filters,
 			fields=["name", "purpose", "stock_entry_type", "posting_date"],
 			order_by="creation desc",
-			limit_page_length=20,
+			# limit_page_length=20,
 		)
 		return {"message": se_list}
 	except Exception as e:

@@ -44,7 +44,7 @@ def listSalesInvoices():
             "Sales Invoice",
             fields=["name", "customer","patient","patient_name","modified", "posting_date", "due_date", "status", "grand_total", "currency"],
             order_by="posting_date desc",
-            limit_page_length=20
+            # limit_page_length=20
         )
         return {"message": sales_invoices}
 
@@ -512,28 +512,51 @@ def filterSalesInvoices():
     if data.get("status"):
         filters["status"] = data["status"]
 
-    # Filter by date range if provided
+    # Filter by date range
     if data.get("from_date") and data.get("to_date"):
         filters["posting_date"] = ["between", [data["from_date"], data["to_date"]]]
     elif data.get("posting_date"):
         filters["posting_date"] = data["posting_date"]
 
     try:
+        # Fetch all invoices with filters
         sales_invoices = frappe.get_all(
             "Sales Invoice",
             filters=filters,
             fields=["name", "customer", "posting_date", "due_date", "status", "grand_total", "currency"],
             order_by="posting_date desc",
-            limit_page_length=20
         )
+
+        # Initialize counters and totals
+        status_summary = {
+            "Paid": {"count": 0, "total": 0.0},
+            "Unpaid": {"count": 0, "total": 0.0},
+            "Cancelled": {"count": 0, "total": 0.0},
+            "Draft": {"count": 0, "total": 0.0},
+            "Others": {"count": 0, "total": 0.0}
+        }
+
+        for invoice in sales_invoices:
+            status = invoice.get("status", "Others")
+            grand_total = invoice.get("grand_total", 0.0)
+
+            if status in status_summary:
+                status_summary[status]["count"] += 1
+                status_summary[status]["total"] += grand_total
+            else:
+                status_summary["Others"]["count"] += 1
+                status_summary["Others"]["total"] += grand_total
 
         return {
             "count": len(sales_invoices),
+            "summary": status_summary,
             "message": sales_invoices
         }
+
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Filter Sales Invoices API")
         return {"error": str(e)}
+
 
 
 # GET ITEMS
