@@ -29,56 +29,58 @@ def authenticate_user():
 
 # 1. List Recent Items
 @frappe.whitelist(allow_guest=True)
-@frappe.whitelist(allow_guest=True)
 def listItems():
-	if frappe.request.method != "GET":
-		frappe.local.response["http_status_code"] = 405
-		return {"error": "Only GET method allowed"}
-
-	if not authenticate_user():
-		return {"error": "Unauthorized"}
-
-	try:
-		items = frappe.get_all(
-			"Item",
-			fields=[
-				"name",
-				"owner",
-				"creation",
-				"modified",
-				"modified_by",
-				"naming_series",
-				"item_code",
-				"item_name",
-				"item_group",
-				"end_of_life",
-				"safety_stock",
-				"standard_rate",
-				"disabled as status"  # This maps "disabled" field as "status"
-			],
-			order_by="creation desc",
-			# limit_page_length=20
-		)
-
-		# Convert 'disabled' (1/0) into readable 'Active' / 'Disabled' text
-		for item in items:
-			bin_data = frappe.db.get_value(
-				"Bin",
-				{"item_code": item["item_code"]},
-				{"actual_qty", "stock_value"},
-				as_dict=True
-			)
-
-			item["stock_qty"] = bin_data.actual_qty if bin_data else 0
-			item["stock_value"] = bin_data.stock_value if bin_data else 0
-			item["status"] = "Disabled" if item["status"] else "Active"
-
-		return {"message": items}
-
-	except Exception as e:
-		frappe.log_error(frappe.get_traceback(), "List Item API")
-		frappe.local.response["http_status_code"] = 500
-		return {"error": str(e)}
+    if frappe.request.method != "GET":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only GET method allowed"}
+ 
+    if not authenticate_user():
+        return {"error": "Unauthorized"}
+ 
+    try:
+        items = frappe.get_all(
+            "Item",
+            fields=[
+                "name",
+                "owner",
+                "creation",
+                "modified",
+                "modified_by",
+                "naming_series",
+                "item_code",
+                "item_name",
+                "item_group",
+                "end_of_life",
+                "standard_rate",
+                "safety_stock",
+                "disabled as status"
+            ],
+            order_by="creation desc",
+        )
+ 
+        for item in items:
+            # Fetch warehouse-wise stock using Stock Ledger
+            stock_entries = frappe.db.sql("""
+                SELECT
+                    warehouse,
+                    SUM(actual_qty) AS stock_qty,
+                    SUM(stock_value) AS stock_value
+                FROM `tabStock Ledger Entry`
+                WHERE item_code = %s
+                GROUP BY warehouse
+            """, item["item_code"], as_dict=True)
+ 
+            item["stock_by_warehouse"] = stock_entries
+            item["total_stock_qty"] = sum(entry["stock_qty"] or 0 for entry in stock_entries)
+            item["total_stock_value"] = sum(entry["stock_value"] or 0 for entry in stock_entries)
+            item["status"] = "Disabled" if item["status"] else "Active"
+ 
+        return {"message": items}
+ 
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "List Item API with Stock")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
 
 # 2. Create Item
 @frappe.whitelist(allow_guest=True)
