@@ -776,3 +776,361 @@ def get_items_from_healthcare(patient=None, customer=None, company=None, item_ty
 
     else:
         frappe.throw(_("Invalid item type"))
+
+
+# ----------------------------------------PHARMA NUMBER COUNT-----------------------------------------------------------------------------------------------------
+
+@frappe.whitelist(allow_guest=False)
+def get_pharmastore_numbercards():
+    if not authenticate_user():
+        return {"error": "Unauthorized"}
+
+    try:
+        today = frappe.utils.today()
+        damaged_warehouse = "Damaged Item Warehouse - HIMSD"
+
+        # ✅ Existing counts
+        total_indent = frappe.db.count("Material Request")
+        out_of_stock = frappe.db.count("Bin", {"actual_qty": 0})
+        in_stock = frappe.db.count("Bin", {"actual_qty": [">", 0]})
+
+        expired_items_batch = frappe.db.sql("""
+            SELECT COUNT(*)
+            FROM `tabBatch`
+            WHERE expiry_date < %s
+              AND disabled = 0
+              AND batch_qty > 0
+        """, (today,))[0][0]
+
+        low_stock_items = frappe.db.sql("""
+            SELECT COUNT(*)
+            FROM `tabBin`
+            WHERE actual_qty < reserved_qty
+        """)[0][0]
+
+        transfer_out = frappe.db.sql("""
+            SELECT COUNT(*)
+            FROM `tabStock Entry Detail` sed
+            JOIN `tabStock Entry` se ON se.name = sed.parent
+            WHERE se.purpose = 'Material Transfer'
+              AND se.docstatus = 1
+              AND se.posting_date = %s
+              AND sed.s_warehouse IS NOT NULL
+        """, (today,))[0][0]
+
+        transfer_in = frappe.db.sql("""
+            SELECT COUNT(*)
+            FROM `tabStock Entry Detail` sed
+            JOIN `tabStock Entry` se ON se.name = sed.parent
+            WHERE se.purpose = 'Material Transfer'
+              AND se.docstatus = 1
+              AND se.posting_date = %s
+              AND sed.t_warehouse IS NOT NULL
+        """, (today,))[0][0]
+
+        stock_issued_today = frappe.db.sql("""
+            SELECT ABS(SUM(actual_qty * valuation_rate))
+            FROM `tabStock Ledger Entry`
+            WHERE posting_date = %s
+              AND actual_qty < 0
+        """, (today,))[0][0] or 0.0
+
+        damaged_items_count_today = frappe.db.sql("""
+            SELECT COUNT(DISTINCT item_code)
+            FROM `tabStock Ledger Entry`
+            WHERE posting_date = %s
+              AND warehouse = %s
+        """, (today, damaged_warehouse))[0][0]
+
+        # ✅ Expired Items (based on end_of_life)
+        expired_items = frappe.db.sql("""
+            SELECT 
+                i.name AS item_code,
+                i.item_name,
+                i.end_of_life,
+                b.warehouse,
+                b.actual_qty,
+                b.valuation_rate,
+                (b.actual_qty * b.valuation_rate) AS stock_value
+            FROM `tabItem` i
+            JOIN `tabBin` b ON i.name = b.item_code
+            WHERE i.end_of_life IS NOT NULL
+              AND i.end_of_life < %s
+              AND b.actual_qty > 0
+        """, (today,), as_dict=True)
+        expired_count = len(expired_items)
+
+        # ✅ Damaged Items
+        damaged_items = frappe.db.sql("""
+            SELECT 
+                sle.item_code,
+                i.item_name,
+                i.stock_uom,
+                SUM(sle.actual_qty) AS quantity,
+                sle.valuation_rate,
+                SUM(sle.actual_qty * sle.valuation_rate) AS stock_value
+            FROM `tabStock Ledger Entry` sle
+            JOIN `tabItem` i ON sle.item_code = i.name
+            WHERE sle.warehouse = %s
+              AND sle.actual_qty > 0
+            GROUP BY sle.item_code, i.item_name, i.stock_uom, sle.valuation_rate
+        """, (damaged_warehouse,), as_dict=True)
+        damaged_count = len(damaged_items)
+
+        return {
+            "message": {
+                "total_indent": total_indent,
+                "out_of_stock": out_of_stock,
+                "in_stock": in_stock,
+                "expired_items_batch": expired_items_batch,
+                "low_stock_items": low_stock_items,
+                "transfer_out": transfer_out,
+                "transfer_in": transfer_in,
+                "stock_issued_today": stock_issued_today,
+                "damaged_items_today": damaged_items_count_today,
+                "expired_items": {
+                    "count": expired_count,
+                    "details": expired_items
+                },
+                "damaged_items": {
+                    "count": damaged_count,
+                    "details": damaged_items
+                }
+            }
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Pharmacy Dashboard API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
+
+
+
+########################################## IP pharma ####################################
+
+@frappe.whitelist(allow_guest=False)
+def get_ip_pharmacy_dashboard():
+    if not authenticate_user():
+        return {"error": "Unauthorized"}
+
+    try:
+        today = frappe.utils.today()
+        damaged_warehouse = "Damaged Item Warehouse - HIMSD"
+
+        # 1. Total Indents
+        total_indent = frappe.db.count("Material Request")
+
+        # 2. Today's Indents
+        todays_indent = frappe.db.count("Material Request", {"transaction_date": today})
+
+        # 3. Pending Items
+        pending_items = frappe.db.count("Material Request", {"status": "Pending"})
+
+        # 4. Delivered Items
+        delivered_items = frappe.db.sql("""
+            SELECT COUNT(*)
+            FROM `tabMaterial Request`
+            WHERE status IN ('Stopped', 'Completed')
+        """)[0][0]
+
+        # 5. Critical Items (stock below safety stock)
+        critical_items = frappe.db.sql("""
+            SELECT COUNT(*)
+            FROM `tabItem` i
+            JOIN `tabBin` b ON b.item_code = i.name
+            WHERE i.safety_stock > 0 AND b.actual_qty < i.safety_stock
+        """)[0][0]
+
+        # ✅ 6. Expired Items: count + data
+        expired_items = frappe.db.sql("""
+            SELECT 
+                i.name AS item_code,
+                i.item_name,
+                i.end_of_life,
+                b.warehouse,
+                b.actual_qty,
+                b.valuation_rate,
+                (b.actual_qty * b.valuation_rate) AS stock_value
+            FROM `tabItem` i
+            JOIN `tabBin` b ON i.name = b.item_code
+            WHERE i.end_of_life IS NOT NULL
+              AND i.end_of_life < %s
+              AND b.actual_qty > 0
+        """, (today,), as_dict=True)
+        expired_count = len(expired_items)
+
+        # ✅ 7. Damaged Items: count + data
+        damaged_items = frappe.db.sql("""
+            SELECT 
+                sle.item_code,
+                i.item_name,
+                i.stock_uom,
+                SUM(sle.actual_qty) AS quantity,
+                sle.valuation_rate,
+                SUM(sle.actual_qty * sle.valuation_rate) AS stock_value
+            FROM `tabStock Ledger Entry` sle
+            JOIN `tabItem` i ON sle.item_code = i.name
+            WHERE sle.warehouse = %s
+              AND sle.actual_qty > 0
+            GROUP BY sle.item_code, i.item_name, i.stock_uom, sle.valuation_rate
+        """, (damaged_warehouse,), as_dict=True)
+        damaged_count = len(damaged_items)
+
+        # ✅ 8. Total Sales (today)
+        total_sales = frappe.db.sql("""
+            SELECT SUM(grand_total)
+            FROM `tabSales Invoice`
+            WHERE posting_date = %s AND docstatus = 1
+        """, (today,))[0][0] or 0.0
+
+        # ✅ 9. Sales by Payment Type
+        def get_payment_total(mode):
+            return frappe.db.sql("""
+                SELECT SUM(sip.amount)
+                FROM `tabSales Invoice Payment` sip
+                JOIN `tabSales Invoice` si ON si.name = sip.parent
+                WHERE sip.mode_of_payment = %s
+                  AND si.posting_date = %s
+                  AND si.docstatus = 1
+            """, (mode, today))[0][0] or 0.0
+
+        cash_total = get_payment_total("Cash")
+        cc_dc_total = get_payment_total("Credit Card") + get_payment_total("Debit Card")
+        upi_total = get_payment_total("UPI")
+
+        return {
+            "message": {
+                "total_indent": total_indent,
+                "todays_indent": todays_indent,
+                "pending_items": pending_items,
+                "delivered_items": delivered_items,
+                "critical_items": critical_items,
+
+                "expired_items": {
+                    "count": expired_count,
+                    "items": expired_items
+                },
+                "damaged_items": {
+                    "count": damaged_count,
+                    "items": damaged_items
+                },
+
+                "total_sales": total_sales,
+                "cash_sales": cash_total,
+                "cc_dc_sales": cc_dc_total,
+                "upi_sales": upi_total
+            }
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "IP Pharmacy Dashboard API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
+
+
+
+####################################### OP Pharma #########################################
+@frappe.whitelist(allow_guest=False)
+def get_op_pharmacy_dashboard():
+    if not authenticate_user():
+        return {"error": "Unauthorized"}
+
+    try:
+        today = frappe.utils.today()
+
+        # 1. Total Sales (Today)
+        total_sales = frappe.db.sql("""
+            SELECT SUM(grand_total)
+            FROM `tabSales Invoice`
+            WHERE posting_date = %s AND docstatus = 1
+        """, (today,))[0][0] or 0.0
+
+        # 2. Payment Totals by Mode
+        def get_payment_total(mode):
+            return frappe.db.sql("""
+                SELECT SUM(sip.amount)
+                FROM `tabSales Invoice Payment` sip
+                JOIN `tabSales Invoice` si ON sip.parent = si.name
+                WHERE sip.mode_of_payment = %s
+                  AND si.posting_date = %s
+                  AND si.docstatus = 1
+            """, (mode, today))[0][0] or 0.0
+
+        cash_total = get_payment_total("Cash")
+        upi_total = get_payment_total("UPI")
+        cc_dc_total = get_payment_total("Credit Card") + get_payment_total("Debit Card")
+
+        # 3. Patient Visited (via Encounter)
+        patient_visited = frappe.db.count("Patient Encounter", {"encounter_date": today})
+
+        # 4. Inventory: Available
+        inventory_available = frappe.db.count("Bin", {"actual_qty": [">", 0]})
+
+        # 5. Inventory: Expired
+        inventory_expired = frappe.db.sql("""
+            SELECT COUNT(*)
+            FROM `tabBatch`
+            WHERE expiry_date < %s
+              AND disabled = 0
+              AND batch_qty > 0
+        """, (today,))[0][0]
+
+        # 6. Collection Summary: OPD/IPD (from Patient Appointment)
+        opd_count = frappe.db.count("Patient Appointment", {
+            "appointment_type": "OPD",
+            "appointment_date": today
+        })
+
+        ipd_count = frappe.db.count("Patient Appointment", {
+            "appointment_type": "Inpatient",  # or "IPD" if that's your label
+            "appointment_date": today
+        })
+
+        return {
+            "message": {
+                "sales": total_sales,
+                "cash": cash_total,
+                "upi": upi_total,
+                "cc_dc": cc_dc_total,
+                "patient_visited": patient_visited,
+                "inventory": {
+                    "available": inventory_available,
+                    "expired": inventory_expired
+                },
+                "collection_summary": {
+                    "opd": opd_count,
+                    "ipd": ipd_count
+                }
+            }
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Hospital Dashboard API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
+
+
+###################################Account Payable/Recievable################################
+@frappe.whitelist(allow_guest=False)
+def count_account_types():
+    if not authenticate_user():
+        return {"error": "Unauthorized"}
+
+    try:
+        # Count of Receivable Accounts
+        receivable_count = frappe.db.count("Account", {"account_type": "Receivable"})
+
+        # Count of Payable Accounts
+        payable_count = frappe.db.count("Account", {"account_type": "Payable"})
+
+        return {
+            "message": {
+                "receivable_accounts": receivable_count,
+                "payable_accounts": payable_count
+            }
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Account Type Count API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}

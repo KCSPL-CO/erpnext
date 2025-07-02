@@ -51,6 +51,8 @@ def listItems():
 				"item_code",
 				"item_name",
 				"item_group",
+				"end_of_life",
+				"safety_stock",
 				"standard_rate",
 				"disabled as status"  # This maps "disabled" field as "status"
 			],
@@ -60,6 +62,15 @@ def listItems():
 
 		# Convert 'disabled' (1/0) into readable 'Active' / 'Disabled' text
 		for item in items:
+			bin_data = frappe.db.get_value(
+				"Bin",
+				{"item_code": item["item_code"]},
+				{"actual_qty", "stock_value"},
+				as_dict=True
+			)
+
+			item["stock_qty"] = bin_data.actual_qty if bin_data else 0
+			item["stock_value"] = bin_data.stock_value if bin_data else 0
 			item["status"] = "Disabled" if item["status"] else "Active"
 
 		return {"message": items}
