@@ -1,35 +1,56 @@
-# file: your_app/your_module/api/stock_api.py
-
 import frappe
 from frappe import _
-
+from frappe.utils import nowdate
+ 
 @frappe.whitelist(allow_guest=False)
-def get_items_by_warehouse(warehouse, from_date=None, to_date=None):
+def get_items_by_warehouse():
     """
-    Returns a list of items in a specific warehouse similar to Stock Balance report.
+    Returns item-wise stock summary for a warehouse using Stock Ledger Entry,
+    including safety stock and end_of_life from Item master.
     """
+ 
+    data = frappe.request.get_json()
+    if not data:
+        frappe.throw(_("Missing JSON payload"))
+ 
+    warehouse = data.get("warehouse")
+    from_date = data.get("from_date") or "2000-01-01"
+    to_date = data.get("to_date") or nowdate()
+ 
     if not warehouse:
         frappe.throw(_("Warehouse is required"))
-
-    stock_items = frappe.db.sql("""
+ 
+    stock_data = frappe.db.sql("""
         SELECT
-            bin.item_code,
-            item.item_name,
-            bin.warehouse,
-            bin.actual_qty,
-            bin.valuation_rate,
-            bin.stock_value
+            sle.item_code,
+            i.item_name,
+            i.safety_stock,
+            i.end_of_life,
+            sle.warehouse,
+            SUM(sle.actual_qty) AS balance_qty,
+            SUM(sle.stock_value_difference) AS stock_value
         FROM
-            `tabBin` bin
+            `tabStock Ledger Entry` sle
         LEFT JOIN
-            `tabItem` item ON bin.item_code = item.name
+            `tabItem` i ON sle.item_code = i.name
         WHERE
-            bin.warehouse = %s AND bin.actual_qty > 0
+            sle.warehouse = %s
+            AND sle.posting_date BETWEEN %s AND %s
+        GROUP BY
+            sle.item_code, sle.warehouse
+        HAVING
+            balance_qty > 0
         ORDER BY
-            bin.item_code
-    """, (warehouse,), as_dict=True)
-
+            sle.item_code
+    """, (warehouse, from_date, to_date), as_dict=True)
+ 
+    for row in stock_data:
+        row["total_stock_qty"] = row["balance_qty"]
+        row["total_stock_value"] = row["stock_value"]
+ 
     return {
         "status": "success",
-        "data": stock_items
+        "data": stock_data
     }
+ 
+ 
