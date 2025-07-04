@@ -55,28 +55,33 @@ def list_purchase_invoices():
         return {"error": str(e)}
 
 
-
 @frappe.whitelist(allow_guest=True)
 def filter_purchase_invoice():
     if not authenticate_user():
         return {"error": "Unauthorized"}
-
+ 
     try:
         today = frappe.utils.today()
-
-        # Counts
-        total_invoices = frappe.db.count("Purchase Invoice", {"docstatus": 1})
-        total_paid = frappe.db.count("Purchase Invoice", {"docstatus": 1, "is_paid": 1})
-        total_unpaid = frappe.db.count("Purchase Invoice", {"docstatus": 1, "is_paid": 0})
-
-        today_paid = frappe.db.count("Purchase Invoice", {
-            "docstatus": 1, "is_paid": 1, "posting_date": today
-        })
-        today_unpaid = frappe.db.count("Purchase Invoice", {
-            "docstatus": 1, "is_paid": 0, "posting_date": today
-        })
-
-        # Today item count and value
+ 
+        # 🔹 Total (all-time) status-wise counts
+        total_status_counts = frappe.db.sql("""
+            SELECT status, COUNT(*) AS count
+            FROM `tabPurchase Invoice`
+            WHERE docstatus = 1
+            GROUP BY status
+        """, as_dict=True)
+        total_summary = {row.status: row.count for row in total_status_counts}
+ 
+        # 🔹 Today's status-wise counts
+        today_status_counts = frappe.db.sql("""
+            SELECT status, COUNT(*) AS count
+            FROM `tabPurchase Invoice`
+            WHERE docstatus = 1 AND posting_date = %s
+            GROUP BY status
+        """, (today,), as_dict=True)
+        today_summary = {row.status: row.count for row in today_status_counts}
+ 
+        # 🔹 Today item purchases
         item_summary = frappe.db.sql("""
             SELECT COUNT(DISTINCT pii.item_code) AS item_count,
                    SUM(pii.amount) AS total_purchase_value
@@ -84,29 +89,34 @@ def filter_purchase_invoice():
             JOIN `tabPurchase Invoice` pi ON pi.name = pii.parent
             WHERE pi.docstatus = 1 AND pi.posting_date = %s
         """, (today,), as_dict=True)[0]
-
+ 
+        # 🔹 Invoice details (last 10 or today's — your choice)
+        invoice_details = frappe.db.sql("""
+            SELECT name, supplier, status, posting_date, grand_total
+            FROM `tabPurchase Invoice`
+            WHERE docstatus = 1
+            ORDER BY modified DESC
+            LIMIT 10
+        """, as_dict=True)
+ 
         return {
             "message": {
-                "invoice_counts": {
-                    "total": total_invoices,
-                    "total_paid": total_paid,
-                    "total_unpaid": total_unpaid,
-                    "today_paid": today_paid,
-                    "today_unpaid": today_unpaid
+                "invoice_status_summary": {
+                    "total": total_summary,
+                    "today": today_summary
                 },
                 "today_item_purchases": {
                     "item_count": item_summary.item_count or 0,
-                    "total_purchase_value": item_summary.total_purchase_value or 0.0
-                }
+                    "total_purchase_value": float(item_summary.total_purchase_value or 0.0)
+                },
+                "invoice_details": invoice_details
             }
         }
-
+ 
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Purchase Invoice Summary API")
         frappe.local.response["http_status_code"] = 500
         return {"error": str(e)}
-
-
 
 
 
