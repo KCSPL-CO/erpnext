@@ -80,26 +80,42 @@ def list_payment_entries():
         filters=filters,
         fields=[
             "name", "posting_date", "mode_of_payment", "paid_amount",
-            "naming_series", "party", "party_type"
+            "naming_series", "party", "party_type", "docstatus"
         ],
-        order_by="posting_date desc",
-        # limit_page_length=100
+        order_by="posting_date desc"
     )
 
-    # Aggregation
     summary = {}
     total_income = 0.0
+
     for pe in payment_entries:
         series = pe.naming_series
-        mode = pe.mode_of_payment
+        mode = pe.mode_of_payment or "null"
+        status = {0: "Draft", 1: "Submitted", 2: "Cancelled"}.get(pe.docstatus, "Unknown")
         amt = pe.paid_amount or 0.0
 
         total_income += amt
-        summary.setdefault(series, {"count": 0, "modes": {}})
+
+        if series not in summary:
+            summary[series] = {
+                "count": 0,
+                "modes": {},
+                "statuses": {}
+            }
+
         summary[series]["count"] += 1
-        summary[series]["modes"].setdefault(mode, {"count": 0, "sum": 0.0})
+
+        # Mode aggregation
+        if mode not in summary[series]["modes"]:
+            summary[series]["modes"][mode] = {"count": 0, "sum": 0.0}
         summary[series]["modes"][mode]["count"] += 1
         summary[series]["modes"][mode]["sum"] += amt
+
+        # Status aggregation
+        if status not in summary[series]["statuses"]:
+            summary[series]["statuses"][status] = {"count": 0, "sum": 0.0}
+        summary[series]["statuses"][status]["count"] += 1
+        summary[series]["statuses"][status]["sum"] += amt
 
     return {
         "payment_entries": payment_entries,
@@ -107,6 +123,7 @@ def list_payment_entries():
         "total_income": total_income,
         "entry_count": len(payment_entries)
     }
+
 
 # Details 
 @frappe.whitelist(allow_guest=True)
