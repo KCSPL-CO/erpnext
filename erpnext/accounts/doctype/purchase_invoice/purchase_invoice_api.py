@@ -73,12 +73,12 @@ def filter_purchase_invoice():
             GROUP BY status
         """, as_dict=True)
 
-        total_summary = {
-            row.status: {
+        total_summary = {}
+        for row in total_status_counts:
+            total_summary[row.status] = {
                 "count": row.count,
                 "amount": float(row.amount or 0.0)
-            } for row in total_status_counts
-        }
+            }
 
         # 🔹 Today's status-wise counts with amount
         today_status_counts = frappe.db.sql("""
@@ -88,12 +88,12 @@ def filter_purchase_invoice():
             GROUP BY status
         """, (current_date,), as_dict=True)
 
-        today_summary = {
-            row.status: {
+        today_summary = {}
+        for row in today_status_counts:
+            today_summary[row.status] = {
                 "count": row.count,
                 "amount": float(row.amount or 0.0)
-            } for row in today_status_counts
-        }
+            }
 
         # 🔹 Today item purchases
         item_summary = frappe.db.sql("""
