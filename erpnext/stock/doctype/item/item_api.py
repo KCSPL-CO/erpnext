@@ -27,17 +27,18 @@ def authenticate_user():
 	return user
 
 
-# 1. List Recent Items
 @frappe.whitelist(allow_guest=True)
 def listItems():
     if frappe.request.method != "GET":
         frappe.local.response["http_status_code"] = 405
         return {"error": "Only GET method allowed"}
- 
+
     if not authenticate_user():
         return {"error": "Unauthorized"}
- 
+
     try:
+        total_inventory_value = 0.0  # 🔹 Total of all inventory values
+
         items = frappe.get_all(
             "Item",
             fields=[
@@ -52,14 +53,15 @@ def listItems():
                 "item_group",
                 "end_of_life",
                 "standard_rate",
+                "valuation_rate AS default_valuation_rate",
                 "safety_stock",
-                "disabled as status"
+                "disabled AS status"
             ],
             order_by="creation desc",
         )
- 
+
         for item in items:
-            # Fetch warehouse-wise stock using Stock Ledger
+            # 🔹 Get stock by warehouse
             stock_entries = frappe.db.sql("""
                 SELECT
                     warehouse,
@@ -69,18 +71,43 @@ def listItems():
                 WHERE item_code = %s
                 GROUP BY warehouse
             """, item["item_code"], as_dict=True)
- 
+
             item["stock_by_warehouse"] = stock_entries
             item["total_stock_qty"] = sum(entry["stock_qty"] or 0 for entry in stock_entries)
             item["total_stock_value"] = sum(entry["stock_value"] or 0 for entry in stock_entries)
+
+            # 🔹 Get latest valuation rate from stock ledger
+            valuation_data = frappe.db.sql("""
+                SELECT valuation_rate
+                FROM `tabStock Ledger Entry`
+                WHERE item_code = %s AND valuation_rate IS NOT NULL
+                ORDER BY posting_date DESC, posting_time DESC
+                LIMIT 1
+            """, (item["item_code"],), as_dict=True)
+
+            latest_valuation_rate = valuation_data[0].valuation_rate if valuation_data else 0.0
+            item["valuation_rate"] = float(latest_valuation_rate or 0.0)
+
+            # 🔹 Calculate inventory value
+            item["inventory_value"] = round(item["total_stock_qty"] * item["valuation_rate"], 2)
+
+            # 🔹 Add to total inventory value
+            total_inventory_value += item["inventory_value"]
+
+            # 🔹 Human-readable status
             item["status"] = "Disabled" if item["status"] else "Active"
- 
-        return {"message": items}
- 
+
+        return {
+            "message": items,
+            "total_inventory_value": round(total_inventory_value, 2)  # ✅ Return the grand total
+        }
+
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "List Item API with Stock")
+        frappe.log_error(frappe.get_traceback(), "List Item API with Valuation Rate")
         frappe.local.response["http_status_code"] = 500
         return {"error": str(e)}
+
+
 
 # 2. Create Item
 @frappe.whitelist(allow_guest=True)
