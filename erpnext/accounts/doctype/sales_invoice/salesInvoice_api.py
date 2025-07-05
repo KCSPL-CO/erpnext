@@ -495,6 +495,68 @@ def getSalesInvoiceDetails():
         return {"error": str(e)}
 
 # 6. Filter Sales Invoices
+# @frappe.whitelist(allow_guest=True)
+# def filterSalesInvoices():
+#     if frappe.request.method != "POST":
+#         frappe.local.response["http_status_code"] = 405
+#         return {"error": "Only POST method allowed"}
+
+#     if not authenticate_user():
+#         return {"error": "Unauthorized"}
+
+#     data = frappe.request.get_json()
+#     filters = {}
+
+#     if data.get("customer"):
+#         filters["customer"] = data["customer"]
+#     if data.get("status"):
+#         filters["status"] = data["status"]
+
+#     # Filter by date range
+#     if data.get("from_date") and data.get("to_date"):
+#         filters["posting_date"] = ["between", [data["from_date"], data["to_date"]]]
+#     elif data.get("posting_date"):
+#         filters["posting_date"] = data["posting_date"]
+
+#     try:
+#         # Fetch all invoices with filters
+#         sales_invoices = frappe.get_all(
+#             "Sales Invoice",
+#             filters=filters,
+#             fields=["name", "customer", "posting_date", "due_date", "status", "grand_total", "currency"],
+#             order_by="posting_date desc",
+#         )
+
+#         # Initialize counters and totals
+#         status_summary = {
+#             "Paid": {"count": 0, "total": 0.0},
+#             "Unpaid": {"count": 0, "total": 0.0},
+#             "Cancelled": {"count": 0, "total": 0.0},
+#             "Draft": {"count": 0, "total": 0.0},
+#             "Others": {"count": 0, "total": 0.0}
+#         }
+
+#         for invoice in sales_invoices:
+#             status = invoice.get("status", "Others")
+#             grand_total = invoice.get("grand_total", 0.0)
+
+#             if status in status_summary:
+#                 status_summary[status]["count"] += 1
+#                 status_summary[status]["total"] += grand_total
+#             else:
+#                 status_summary["Others"]["count"] += 1
+#                 status_summary["Others"]["total"] += grand_total
+
+#         return {
+#             "count": len(sales_invoices),
+#             "summary": status_summary,
+#             "message": sales_invoices
+#         }
+
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), "Filter Sales Invoices API")
+#         return {"error": str(e)}
+
 @frappe.whitelist(allow_guest=True)
 def filterSalesInvoices():
     if frappe.request.method != "POST":
@@ -504,7 +566,10 @@ def filterSalesInvoices():
     if not authenticate_user():
         return {"error": "Unauthorized"}
 
-    data = frappe.request.get_json()
+    import datetime
+
+    # Fix: Ensure data is always a dictionary
+    data = frappe.request.get_json() or {}
     filters = {}
 
     if data.get("customer"):
@@ -512,14 +577,14 @@ def filterSalesInvoices():
     if data.get("status"):
         filters["status"] = data["status"]
 
-    # Filter by date range
+    # Date range
     if data.get("from_date") and data.get("to_date"):
         filters["posting_date"] = ["between", [data["from_date"], data["to_date"]]]
     elif data.get("posting_date"):
         filters["posting_date"] = data["posting_date"]
 
     try:
-        # Fetch all invoices with filters
+        # Fetch all matching sales invoices
         sales_invoices = frappe.get_all(
             "Sales Invoice",
             filters=filters,
@@ -527,36 +592,77 @@ def filterSalesInvoices():
             order_by="posting_date desc",
         )
 
-        # Initialize counters and totals
-        status_summary = {
-            "Paid": {"count": 0, "total": 0.0},
-            "Unpaid": {"count": 0, "total": 0.0},
-            "Cancelled": {"count": 0, "total": 0.0},
-            "Draft": {"count": 0, "total": 0.0},
-            "Others": {"count": 0, "total": 0.0}
-        }
+        # Define known series categories
+        categories = [
+            "ACC-SINV", "ACC-SINV-RET", "DRUG-SINV", "LAB-SINV", "SERV-SINV",
+            "CONS-SINV", "RAW-SINV", "PROD-SINV", "SUB-SINV", "DEMO-SINV"
+        ]
+
+        # Define all known statuses
+        status_summary_keys = [
+            "Unpaid", "Paid", "Draft", "Credit Note Issued",
+            "Return", "Cancelled", "Overdue"
+        ]
+
+        # Initialize status summary structure
+        def init_summary():
+            return {
+                "Unpaid": {"count": 0, "total": 0.0},
+                "Paid": {"count": 0, "total": 0.0},
+                "Draft": {"count": 0, "total": 0.0},
+                "Credit Note Issued": {"count": 0, "total": 0.0},
+                "Return": {"count": 0, "total": 0.0},
+                "Cancelled": {"count": 0, "total": 0.0},
+                "Overdue": {"count": 0, "total": 0.0},
+                "Others": {"count": 0, "total": 0.0}
+            }
+
+        # Prepare summaries
+        overall_category_summary = {cat: init_summary() for cat in categories}
+        today_category_summary = {cat: init_summary() for cat in categories}
+
+        today = frappe.utils.today()
 
         for invoice in sales_invoices:
-            status = invoice.get("status", "Others")
-            grand_total = invoice.get("grand_total", 0.0)
+            name = invoice.get("name", "")
+            status = str(invoice.get("status", "Others")).strip()
+            grand_total = float(invoice.get("grand_total", 0.0))
+            posting_date = str(invoice.get("posting_date"))
 
-            if status in status_summary:
-                status_summary[status]["count"] += 1
-                status_summary[status]["total"] += grand_total
-            else:
-                status_summary["Others"]["count"] += 1
-                status_summary["Others"]["total"] += grand_total
+            matched = False
+            for cat in categories:
+                if name.startswith(cat):
+                    matched = True
+
+                    # Use "Others" if status is unexpected
+                    if status not in status_summary_keys:
+                        summary_status = "Others"
+                    else:
+                        summary_status = status
+
+                    # All-time summary
+                    overall_category_summary[cat][summary_status]["count"] += 1
+                    overall_category_summary[cat][summary_status]["total"] += grand_total
+
+                    # Today's summary
+                    if posting_date == today:
+                        today_category_summary[cat][summary_status]["count"] += 1
+                        today_category_summary[cat][summary_status]["total"] += grand_total
+
+                    break
+
+            # Optionally handle unmatched categories (skipped)
 
         return {
             "count": len(sales_invoices),
-            "summary": status_summary,
-            "message": sales_invoices
+            "all_invoices": sales_invoices,
+            "summary_all_time": overall_category_summary,
+            "summary_today": today_category_summary
         }
 
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Filter Sales Invoices API")
         return {"error": str(e)}
-
 
 
 # GET ITEMS
