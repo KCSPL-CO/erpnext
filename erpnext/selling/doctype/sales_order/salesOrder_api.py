@@ -1,6 +1,7 @@
 import base64
 import frappe
 from frappe.utils.password import get_decrypted_password
+from frappe.utils import flt
 
 
 def authenticate_user():
@@ -26,34 +27,39 @@ def authenticate_user():
 
 @frappe.whitelist(allow_guest=True)
 def filter_get_sales_order_details():
-	# Only allow GET
-	if frappe.request.method != "GET":
-		frappe.local.response["http_status_code"] = 405
-		return {"error": "Only GET method allowed"}
+    # ✅ Change method check to POST
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
 
-	# Authenticate
-	if not authenticate_user():
-		return {"error": "Unauthorized"}
+    # ✅ Authenticate
+    user = authenticate_user()
+    if not user:
+        return {"error": "Unauthorized"}
 
-	# Get Sales Order ID from query string (?id=...)
-	order_id = frappe.request.args.get("id")
-	if not order_id:
-		frappe.local.response["http_status_code"] = 400
-		return {"error": "Missing Sales Order ID"}
+    # ✅ Get JSON body instead of query params
+    data = frappe.request.get_json()
+    order_id = data.get("id") or data.get("name")
 
-	try:
-		sales_order = frappe.get_doc("Sales Order", order_id)
-	except frappe.DoesNotExistError:
-		frappe.local.response["http_status_code"] = 404
-		return {"error": f"Sales Order {order_id} not found"}
+    if not order_id:
+        frappe.local.response["http_status_code"] = 400
+        return {"error": "Missing Sales Order ID"}
 
-	return {
-		"message": {
-			"name": sales_order.name,
-			"parent_doctype": sales_order.doctype,
-			"items": sales_order.items
-		}
-	}
+    try:
+        sales_order = frappe.get_doc("Sales Order", order_id)
+    except frappe.DoesNotExistError:
+        frappe.local.response["http_status_code"] = 404
+        return {"error": f"Sales Order {order_id} not found"}
+
+    return {
+        "message": {
+            "name": sales_order.name,
+            "parent_doctype": sales_order.doctype,
+            "items": sales_order.items
+        }
+    }
+
+
 
 @frappe.whitelist(allow_guest=True)
 def get_sales_order_list():
@@ -141,7 +147,7 @@ def create_sales_order():
 		})
 		doc.insert(ignore_permissions=True)
 		frappe.db.commit()
-		return {"message": "Sales Order created", "id": doc.name}
+		return {"message": "Sales Order created", "id": doc.name, "grand_total":doc.grand_total}
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Create Sales Order API Error")
 		return {"error": str(e)}
@@ -212,7 +218,7 @@ def update_and_submit_sales_order():
         frappe.db.commit()
 
         return {
-            "message": "Sales Order submitted and references updated successfully",
+            "message": "Sales Order  updated successfully",
             "updated_data": doc.as_dict()
         }
 
@@ -226,29 +232,129 @@ def update_and_submit_sales_order():
 
 
 
+
+
+import frappe
+from frappe.utils import flt
+
 @frappe.whitelist(allow_guest=True)
 def update_sales_order():
-	if frappe.request.method != "PUT":
+	if frappe.request.method != "POST":
 		frappe.local.response["http_status_code"] = 405
-		return {"error": "Only PUT method allowed"}
+		return {"error": "Only POST method allowed"}
 
 	if not authenticate_user():
 		return {"error": "Unauthorized"}
 
 	data = frappe.request.get_json()
-	order_id = data.get("name") or data.get("id")
-	if not order_id:
+	sales_order_name = data.get("name") or data.get("id")
+	incoming_items = data.get("items")
+
+	if not sales_order_name:
 		return {"error": "Missing Sales Order ID"}
 
+	if not incoming_items:
+		return {"error": "Missing items to update"}
+
 	try:
-		doc = frappe.get_doc("Sales Order", order_id)
-		doc.update(data)
+		# Get the Sales Order document
+		doc = frappe.get_doc("Sales Order", sales_order_name)
+
+		# Get company abbreviation
+		company_abbr = frappe.db.get_value("Company", doc.company, "abbr") or "HIMS"
+
+		for item in incoming_items:
+			item_code = item.get("item_code")
+			if not item_code:
+				continue
+
+			# Fetch Item Doc
+			try:
+				item_doc = frappe.get_doc("Item", item_code)
+			except frappe.DoesNotExistError:
+				frappe.log_error(f"Item {item_code} not found", "Sales Order Item Update")
+				continue
+
+			# Get default values from item_defaults for this company
+			default_warehouse = ""
+			income_account = ""
+			expense_account = ""
+			for default in item_doc.get("item_defaults", []):
+				if default.company == doc.company:
+					default_warehouse = default.default_warehouse or ""
+					income_account = default.income_account or ""
+					expense_account = default.expense_account or ""
+					break
+
+			# Fallback values
+			if not income_account:
+				income_account = f"Sales - {company_abbr}"
+			if not expense_account:
+				expense_account = f"Cost of Goods Sold - {company_abbr}"
+			if not default_warehouse:
+				default_warehouse = f"Stores - {company_abbr}"
+
+			# Get price_list_rate from Item Price
+			price_list_rate = frappe.db.get_value(
+				"Item Price",
+				{
+					"item_code": item_code,
+					"selling": 1,
+					"price_list": doc.selling_price_list
+				},
+				"price_list_rate"
+			)
+
+			# Use flt() to ensure valid numeric values
+			qty = flt(item.get("qty"), 1)
+			rate = flt(price_list_rate, 0)
+			amount = flt(qty * rate, 0)
+
+			# Build merged item with safe numeric values
+			merged_item = {
+				"item_code": item_code,
+				"item_name": item_doc.item_name,
+				"description": item_doc.description or item_doc.item_name,
+				"uom": item_doc.stock_uom,
+				"stock_uom": item_doc.stock_uom,
+				"warehouse": default_warehouse,
+				"income_account": income_account,
+				"expense_account": expense_account,
+				"qty": qty,
+				"rate": rate,
+				"price_list_rate": rate,
+				"amount": amount,
+				"base_rate": rate,
+				"base_amount": amount,
+				"net_rate": rate,
+				"net_amount": amount,
+				"conversion_factor": 1,
+				"cost_center": f"Main - {company_abbr}",
+				"reference_dt": item.get("reference_dt", ""),
+				"reference_dn": item.get("reference_dn", "")
+			}
+
+			# Append the new item
+			doc.append("items", merged_item)
+
+		# Save and commit changes
 		doc.save(ignore_permissions=True)
 		frappe.db.commit()
-		return {"message": "Sales Order updated", "id": doc.name}
+
+		return {
+			"message": "Sales Order updated successfully",
+			"updated_data": doc.as_dict()
+		}
+
+	except frappe.DoesNotExistError:
+		frappe.local.response["http_status_code"] = 404
+		return {"error": "Sales Order not found"}
+
 	except Exception as e:
-		frappe.log_error(frappe.get_traceback(), "Update Sales Order API Error")
+		frappe.log_error(frappe.get_traceback(), "Update Sales Order API")
 		return {"error": str(e)}
+
+
 
 
 @frappe.whitelist(allow_guest=True)

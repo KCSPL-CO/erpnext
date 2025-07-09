@@ -603,6 +603,7 @@
   },
   {
    "allow_bulk_edit": 1,
+   "allow_on_submit": 1,
    "fieldname": "items",
    "fieldtype": "Table",
    "hide_days": 1,
@@ -642,6 +643,7 @@
    "hide_seconds": 1
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "total_qty",
    "fieldtype": "Float",
    "hide_days": 1,
@@ -650,6 +652,7 @@
    "read_only": 1
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "base_total",
    "fieldtype": "Currency",
    "hide_days": 1,
@@ -660,6 +663,7 @@
    "read_only": 1
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "base_net_total",
    "fieldtype": "Currency",
    "hide_days": 1,
@@ -679,6 +683,7 @@
    "hide_seconds": 1
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "total",
    "fieldtype": "Currency",
    "hide_days": 1,
@@ -688,6 +693,7 @@
    "read_only": 1
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "net_total",
    "fieldtype": "Currency",
    "hide_days": 1,
@@ -749,6 +755,7 @@
    "hide_seconds": 1
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "taxes_and_charges",
    "fieldtype": "Link",
    "hide_days": 1,
@@ -760,6 +767,7 @@
    "print_hide": 1
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "taxes",
    "fieldtype": "Table",
    "hide_days": 1,
@@ -814,6 +822,7 @@
    "hide_seconds": 1
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "total_taxes_and_charges",
    "fieldtype": "Currency",
    "hide_days": 1,
@@ -983,6 +992,7 @@
    "width": "50%"
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "grand_total",
    "fieldtype": "Currency",
    "hide_days": 1,
@@ -996,6 +1006,7 @@
    "width": "150px"
   },
   {
+   "allow_on_submit": 1,
    "depends_on": "eval:!doc.disable_rounded_total",
    "fieldname": "rounding_adjustment",
    "fieldtype": "Currency",
@@ -1008,6 +1019,7 @@
    "read_only": 1
   },
   {
+   "allow_on_submit": 1,
    "bold": 1,
    "depends_on": "eval:!doc.disable_rounded_total",
    "fieldname": "rounded_total",
@@ -1022,6 +1034,7 @@
    "width": "150px"
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "in_words",
    "fieldtype": "Data",
    "hide_days": 1,
@@ -1034,6 +1047,7 @@
    "width": "200px"
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "advance_paid",
    "fieldtype": "Currency",
    "hide_days": 1,
@@ -1671,7 +1685,7 @@
  "idx": 105,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-06-21 11:34:56.128203",
+ "modified": "2025-07-02 11:29:32.946585",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Sales Order",

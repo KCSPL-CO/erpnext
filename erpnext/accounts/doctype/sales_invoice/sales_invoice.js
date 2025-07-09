@@ -1141,3 +1141,57 @@ var select_loyalty_program = function (frm, loyalty_programs) {
 
 	dialog.show();
 };
+
+
+
+frappe.ui.form.on('Sales Invoice', {
+    items_on_form_rendered: function(frm) {
+        update_series_based_on_items(frm);
+    },
+    items_add: function(frm) {
+        update_series_based_on_items(frm);
+    },
+    validate: function(frm) {
+        update_series_based_on_items(frm);
+    }
+});
+ 
+function update_series_based_on_items(frm) {
+    if (!frm.doc.items || frm.doc.items.length === 0) return;
+ 
+    const group = frm.doc.items[0].item_group;
+    const year = new Date().getFullYear();
+    let new_series = "ACC-SINV-.YYYY.-"; // Default
+ 
+    switch (group) {
+        case "Drug":
+            new_series = `DRUG-SINV-${year}-`;
+            break;
+        case "Laboratory":
+            new_series = `LAB-SINV-${year}-`;
+            break;
+        case "Services":
+            new_series = `SERV-SINV-${year}-`;
+            break;
+        case "Consumable":
+            new_series = `CONS-SINV-${year}-`;
+            break;
+        case "Raw Material":
+            new_series = `RAW-SINV-${year}-`;
+            break;
+        case "Products":
+            new_series = `PROD-SINV-${year}-`;
+            break;
+        case "Sub Assemblies":
+            new_series = `SUB-SINV-${year}-`;
+            break;
+        case "Demo Item Group":
+            new_series = `DEMO-SINV-${year}-`;
+            break;
+    }
+ 
+    if (frm.doc.naming_series !== new_series) {
+        frm.set_value('naming_series', new_series);
+        frappe.show_alert(`Series changed to ${new_series}`);
+    }
+}

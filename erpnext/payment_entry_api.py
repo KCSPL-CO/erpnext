@@ -3,6 +3,7 @@ import json
 import base64
 from frappe.utils.password import get_decrypted_password
 from frappe.utils import flt
+from frappe.utils import today
 
 # ------------------ AUTH ------------------
 def authenticate_user():
@@ -23,6 +24,64 @@ def authenticate_user():
     except:
         frappe.local.response["http_status_code"] = 401
         return None
+    
+# -----------------------------------------------------------------------------------------
+
+
+@frappe.whitelist(allow_guest=True)
+def get_payment_summary_by_mode():
+    if frappe.request.method != "GET":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only GET method allowed"}
+
+    user = authenticate_user()
+    if not user:
+        return {"error": "Unauthorized"}
+
+    try:
+        # Define expected modes
+        expected_modes = ["Cash", "Cheque", "Bank Draft", "Credit Card", "Debit Card", "UPI"]
+
+        # Fetch Payment Entries created today by this user
+        payments = frappe.get_all(
+            "Payment Entry",
+            filters={
+                "owner": user.name,
+                "docstatus": 1,
+                "posting_date": today()
+            },
+            fields=["name", "posting_date", "paid_amount", "mode_of_payment", "party"]
+        )
+
+        # Initialize summary with 0 for all expected modes
+        summary = {mode: 0.0 for mode in expected_modes}
+        payment_list = []
+
+        for entry in payments:
+            mop = entry.mode_of_payment
+            if mop in summary:
+                summary[mop] += entry.paid_amount
+            else:
+                summary[mop] = entry.paid_amount  # Optional: handle unexpected modes too
+
+            payment_list.append({
+                "name": entry.name,
+                "posting_date": entry.posting_date,
+                "paid_amount": entry.paid_amount,
+                "mode_of_payment": entry.mode_of_payment,
+                "party": entry.party
+            })
+
+        summary["payment_list"] = payment_list
+
+        return {
+            "message": f"Payment summary for user {user.name}",
+            "data": [summary]
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "get_payment_summary_by_mode API")
+        return {"error": str(e)}
 
 # ------------------ CREATE (POST) ------------------
 @frappe.whitelist()

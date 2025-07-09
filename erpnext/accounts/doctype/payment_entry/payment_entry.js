@@ -1903,3 +1903,51 @@ function prompt_for_missing_account(frm, account) {
 function get_deduction_amount_precision() {
 	return frappe.meta.get_field_precision(frappe.meta.get_field("Payment Entry Deduction", "amount"));
 }
+
+
+frappe.ui.form.on('Payment Entry', {
+    reference_no: function(frm) {
+        set_payment_series_based_on_invoice(frm);
+    },
+    reference_date: function(frm) {
+        set_payment_series_based_on_invoice(frm);
+    },
+    validate: function(frm) {
+        set_payment_series_based_on_invoice(frm);
+    }
+});
+ 
+function set_payment_series_based_on_invoice(frm) {
+    if (frm.doc.references && frm.doc.references.length > 0) {
+        const ref = frm.doc.references[0];
+ 
+        if (ref.reference_doctype === "Sales Invoice") {
+            const invoice_id = ref.reference_name;
+            const year = new Date().getFullYear();
+            let new_series = "ACC-PAY-.YYYY.-"; // default
+ 
+            if (invoice_id.startsWith("DRUG-SINV-")) {
+                new_series = "ACC-DRUG-PAY-.YYYY.-";
+            } else if (invoice_id.startsWith("LAB-SINV-")) {
+                new_series = "ACC-LAB-PAY-.YYYY.-";
+            } else if (invoice_id.startsWith("SERV-SINV-")) {
+                new_series = "ACC-SERV-PAY-.YYYY.-";
+            } else if (invoice_id.startsWith("CONS-SINV-")) {
+                new_series = "ACC-CONS-PAY-.YYYY.-";
+            } else if (invoice_id.startsWith("RAW-SINV-")) {
+                new_series = "ACC-RAW-PAY-.YYYY.-";
+            } else if (invoice_id.startsWith("PROD-SINV-")) {
+                new_series = "ACC-PROD-PAY-.YYYY.-";
+            } else if (invoice_id.startsWith("SUB-SINV-")) {
+                new_series = "ACC-SUB-PAY-.YYYY.-";
+            } else if (invoice_id.startsWith("DEMO-SINV-")) {
+                new_series = "ACC-DEMO-PAY-.YYYY.-";
+            }
+ 
+            if (frm.doc.naming_series !== new_series) {
+                frm.set_value("naming_series", new_series);
+                frappe.show_alert(`Series changed to ${new_series}`);
+            }
+        }
+    }
+}

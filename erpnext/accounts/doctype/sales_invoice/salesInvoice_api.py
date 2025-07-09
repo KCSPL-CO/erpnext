@@ -28,6 +28,45 @@ def authenticate_user():
 
     return user
 
+from frappe.utils import today
+
+@frappe.whitelist(allow_guest=True)
+def get_sales_invoice_summary():
+    if frappe.request.method != "GET":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only GET method allowed"}
+
+    user = authenticate_user()
+    if not user:
+        return {"error": "Unauthorized"}
+
+    try:
+        # Fetch Sales Invoices created today with docstatus 1
+        invoices = frappe.get_all(
+            "Sales Invoice",
+            filters={
+                "docstatus": 1,
+                "posting_date": today()
+            },
+            fields=["name", "customer", "grand_total", "posting_date"]
+        )
+
+        total_amount = sum(inv.grand_total for inv in invoices)
+        invoice_count = len(invoices)
+
+        return {
+            "message": f"Sales Invoice summary for {today()}",
+            "data": {
+                "total_sales_invoices": invoice_count,
+                "grand_total": total_amount,
+                "invoice_list": invoices
+            }
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "get_sales_invoice_summary API")
+        return {"error": str(e)}
+
 
 # 1. List Sales Invoices
 @frappe.whitelist(allow_guest=True)
