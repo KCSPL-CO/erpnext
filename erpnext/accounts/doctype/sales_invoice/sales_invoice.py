@@ -2832,3 +2832,58 @@ def check_if_return_invoice_linked_with_payment_entry(self):
 			message += " " + ", ".join(payment_entries_link) + " "
 			message += _("to unallocate the amount of this Return Invoice before cancelling it.")
 			frappe.throw(message)
+
+
+
+import frappe
+from frappe.utils import today
+
+def create_lab_order_from_invoice(doc, method):
+    if doc.status != "Paid":
+        return
+
+    for item in doc.items:
+        if item.reference_dt == "Service Request" and item.reference_dn:
+            try:
+                sr = frappe.get_doc("Service Request", item.reference_dn)
+            except frappe.DoesNotExistError:
+                continue  # skip if SR doesn't exist
+
+            # 🔁 Skip silently if not Observation Template
+            if sr.get("template_dt") != "Observation Template":
+                return  # exit without any log or message
+
+            patient = sr.patient
+            encounter = sr.encounter or None
+            practitioner = None
+
+            # Get practitioner from encounter
+            if encounter:
+                enc_doc = frappe.get_doc("Patient Encounter", encounter)
+                practitioner = enc_doc.practitioner
+
+            # Get today's token
+            token_doc = frappe.get_all(
+                "Token Generation",
+                filters={
+                    "patient": patient,
+                    "date": today()
+                },
+                fields=["token"],
+                limit=1,
+                order_by="creation desc"
+            )
+            token = token_doc[0]["token"] if token_doc else None
+
+            # Create Lab Order
+            lab_order = frappe.new_doc("Lab Order")
+            lab_order.patient = patient
+            lab_order.encounter = encounter
+            lab_order.healthcare_practitioner = practitioner
+            lab_order.reference_dt = item.reference_dt
+            lab_order.reference_dn = item.reference_dn
+            lab_order.reference_invoice = doc.name
+            lab_order.token = token
+            lab_order.lab_order_template = sr.template_dn
+            lab_order.insert(ignore_permissions=True)
+

@@ -1195,3 +1195,34 @@ function update_series_based_on_items(frm) {
         frappe.show_alert(`Series changed to ${new_series}`);
     }
 }
+
+
+frappe.ui.form.on('Sales Invoice', {
+  patient: function (frm) {
+    if (frm.doc.patient) {
+      const today = frappe.datetime.get_today();
+
+      frappe.call({
+        method: 'frappe.client.get_list',
+        args: {
+          doctype: 'Token Generation',
+          filters: {
+            patient: frm.doc.patient,
+            date: today  // assuming the field is called 'date'
+          },
+          fields: ['name', 'token'],
+          limit_page_length: 1,
+          order_by: 'creation desc'
+        },
+        callback: function (r) {
+          if (r.message && r.message.length > 0) {
+            frm.set_value('customer_token', r.message[0].token);
+          } else {
+            frappe.msgprint(__('No Token found for this patient today.'));
+            frm.set_value('customer_token', null);
+          }
+        }
+      });
+    }
+  }
+});

@@ -202,6 +202,10 @@ class PaymentEntry(AccountsController):
 		self.make_advance_payment_ledger_entries()
 		self.update_advance_paid()  # advance_paid_status depends on the payment request amount
 		self.set_status()
+		
+		# 👇 Your Custom Function Call
+		create_lab_orders_from_payment_entry(self)
+
 
 	def validate_for_repost(self):
 		validate_docs_for_voucher_types(["Payment Entry"])
@@ -3674,3 +3678,65 @@ def make_payment_order(source_name, target_doc=None):
 @erpnext.allow_regional
 def add_regional_gl_entries(gl_entries, doc):
 	return
+
+
+
+import frappe
+from frappe.utils import today
+
+def create_lab_orders_from_payment_entry(doc, method=None):
+	for ref in doc.references:
+		if ref.reference_doctype == "Sales Invoice" and ref.reference_name:
+			try:
+				si = frappe.get_doc("Sales Invoice", ref.reference_name)
+			except frappe.DoesNotExistError:
+				continue
+
+			if si.docstatus != 1:
+				continue
+
+			for item in si.items:
+				if item.reference_dt == "Service Request" and item.reference_dn:
+					try:
+						sr = frappe.get_doc("Service Request", item.reference_dn)
+					except frappe.DoesNotExistError:
+						continue
+
+					if sr.get("template_dt") != "Observation Template":
+						continue
+
+					patient = sr.patient
+					encounter = sr.order_group or None
+					practitioner = None
+
+					if encounter:
+						try:
+							enc_doc = frappe.get_doc("Patient Encounter", encounter)
+							practitioner = enc_doc.practitioner
+						except frappe.DoesNotExistError:
+							pass
+
+					token_doc = frappe.get_all(
+						"Token Generation",
+						filters={
+							"patient": patient,
+							"date": today()
+						},
+						fields=["token"],
+						limit=1,
+						order_by="creation desc"
+					)
+					token = token_doc[0]["token"] if token_doc else None
+
+					lab_order = frappe.new_doc("Lab Order")
+					lab_order.patient = patient
+					lab_order.encounter = encounter
+					lab_order.healthcare_practitioner = practitioner
+					lab_order.reference_dt = item.reference_dt
+					lab_order.reference_dn = item.reference_dn
+					lab_order.reference_invoice = si.name
+					lab_order.token = token
+					lab_order.lab_order_template = sr.template_dn
+					lab_order.billing_status = "Invoiced"
+					lab_order.status = "Active"
+					lab_order.insert(ignore_permissions=True)
