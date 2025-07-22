@@ -36,7 +36,7 @@ class SalesOrderItem(Document):
 		customer_item_code: DF.Data | None
 		delivered_by_supplier: DF.Check
 		delivered_qty: DF.Float
-		delivery_date: DF.Datetime | None
+		delivery_date: DF.Date | None
 		description: DF.TextEditor | None
 		discount_amount: DF.Currency
 		discount_percentage: DF.Percent
