@@ -21,6 +21,7 @@
   "transaction_date",
   "delivery_date",
   "inpatient_record",
+  "patient",
   "column_break1",
   "po_no",
   "po_date",
@@ -1679,13 +1680,21 @@
    "fieldtype": "Link",
    "label": "Inpatient Record",
    "options": "Inpatient Record"
+  },
+  {
+   "allow_on_submit": 1,
+   "fetch_from": "inpatient_record.patient",
+   "fieldname": "patient",
+   "fieldtype": "Link",
+   "label": "Patient",
+   "options": "Patient"
   }
  ],
  "icon": "fa fa-file-text",
  "idx": 105,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-07-02 11:29:32.946585",
+ "modified": "2025-07-23 15:44:44.017183",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Sales Order",

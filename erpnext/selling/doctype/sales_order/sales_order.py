@@ -123,6 +123,7 @@ class SalesOrder(SellingController):
 		other_charges_calculation: DF.TextEditor | None
 		packed_items: DF.Table[PackedItem]
 		party_account_currency: DF.Link | None
+		patient: DF.Link | None
 		payment_schedule: DF.Table[PaymentSchedule]
 		payment_terms_template: DF.Link | None
 		per_billed: DF.Percent
