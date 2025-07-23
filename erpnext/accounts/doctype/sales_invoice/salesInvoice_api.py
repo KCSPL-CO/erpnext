@@ -81,7 +81,7 @@ def listSalesInvoices():
     try:
         sales_invoices = frappe.get_all(
             "Sales Invoice",
-            fields=["name", "customer","patient","patient_name","modified", "posting_date", "due_date", "status", "grand_total", "currency"],
+            fields=["name", "customer","patient","patient_name","modified", "posting_date","paid_date", "due_date", "status", "grand_total", "currency"],
             order_by="posting_date desc",
             # limit_page_length=20
         )
