@@ -41,7 +41,6 @@ def indent_api():
         return {"error": "Unauthorized"}
 
     data = frappe.request.get_json()
-
     sales_order_name = data.get("name")
     items = data.get("items", [])
 
@@ -76,7 +75,39 @@ def indent_api():
             "reference_dn": reference_dn
         })
 
-    # Structure to return and also pass to update_child_qty_rate
+        # ✅ Lab Order condition check
+        if reference_dt == "Service Request" and reference_dn:
+            sr_doc = frappe.get_doc(reference_dt, reference_dn)
+
+            if sr_doc.template_dt == "Observation Template":
+                patient = sr_doc.patient
+                encounter = sr_doc.order_group
+                practitioner = sr_doc.practitioner
+                reference_order = sales_order_name
+                template_dn = sr_doc.template_dn
+                # token = getattr(sr_doc, "token", None)
+
+                # Fetch inpatient_record via patient
+                inpatient_record = frappe.db.get_value("Patient", patient, "inpatient_record")
+                if inpatient_record:
+                    inpatient_doc = frappe.get_doc("Inpatient Record", inpatient_record)
+                    estimated_cost = inpatient_doc.estimated_cost  # Optional if needed later
+
+                # ✅ Create Lab Order
+                lab_order = frappe.new_doc("Lab Order")
+                lab_order.patient = patient
+                lab_order.encounter = encounter
+                lab_order.healthcare_practitioner = practitioner
+                lab_order.reference_dt = reference_dt
+                lab_order.reference_dn = reference_dn
+                lab_order.reference_order = reference_order
+                # lab_order.token = token
+                lab_order.lab_order_template = template_dn
+                lab_order.billing_status = "Indented"
+                lab_order.status = "Active"
+                lab_order.insert(ignore_permissions=True)
+
+    # ✅ Update child qty and rate in Sales Order
     response_data = {
         "parent_doctype": "Sales Order",
         "parent_doctype_name": sales_order_name,
@@ -84,18 +115,16 @@ def indent_api():
         "trans_items": trans_items
     }
 
-    # Now call update_child_qty_rate
-    result = update_child_qty_rate(
+    update_child_qty_rate(
         parent_doctype=response_data["parent_doctype"],
-        trans_items=json.dumps(response_data["trans_items"]),  # ✅ convert to JSON string
+        trans_items=json.dumps(response_data["trans_items"]),
         parent_doctype_name=response_data["parent_doctype_name"],
         child_docname="items"
     )
 
-
     return {
-        "message":"Item Indented Sucessfully" ,
-        "sucess":True,
+        "message": "Item Indented Successfully",
+        "success": True,
         "update_result": response_data
     }
 
