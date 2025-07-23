@@ -195,6 +195,7 @@ class PaymentEntry(AccountsController):
 	def on_submit(self):
 		if self.difference_amount:
 			frappe.throw(_("Difference Amount must be zero"))
+
 		self.make_gl_entries()
 		self.update_outstanding_amounts()
 		self.update_payment_schedule()
@@ -202,7 +203,17 @@ class PaymentEntry(AccountsController):
 		self.make_advance_payment_ledger_entries()
 		self.update_advance_paid()  # advance_paid_status depends on the payment request amount
 		self.set_status()
-		
+
+		# 👇 Update paid_date in referenced documents
+		for ref in self.references:
+			if ref.reference_doctype == "Sales Invoice" and ref.reference_name:
+				frappe.db.set_value(
+					"Sales Invoice",
+					ref.reference_name,
+					"paid_date",
+					self.posting_date  # or self.modified if you want the current timestamp
+				)
+
 		# 👇 Your Custom Function Call
 		create_lab_orders_from_payment_entry(self)
 
@@ -3706,6 +3717,17 @@ def create_lab_orders_from_payment_entry(doc, method=None):
 						continue
 
 					patient = sr.patient
+
+					# ✅ Fetch Patient document to check if inpatient_record is set
+					try:
+						patient_doc = frappe.get_doc("Patient", patient)
+					except frappe.DoesNotExistError:
+						continue
+
+					# ✅ Skip Lab Order creation if patient has an inpatient_record
+					if patient_doc.inpatient_record:
+						continue
+
 					encounter = sr.order_group or None
 					practitioner = None
 
