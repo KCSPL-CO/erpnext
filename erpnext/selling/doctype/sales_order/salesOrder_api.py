@@ -253,8 +253,7 @@ def update_sales_order():
 	if not sales_order_name:
 		return {"error": "Missing Sales Order ID"}
 
-	if not incoming_items:
-		return {"error": "Missing items to update"}
+	
 
 	try:
 		# Get the Sales Order document

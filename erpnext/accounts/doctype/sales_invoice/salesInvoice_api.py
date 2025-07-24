@@ -124,22 +124,22 @@ def createSalesInvoice():
  
     try:
         data = frappe.request.get_json()
- 
+
         item_codes = [
             item.get("item_code") or item.get("item")
             for item in data.get("items", [])
         ]
         item_groups = []
- 
+
         for item_code in item_codes:
             if item_code:
                 group = frappe.db.get_value("Item", item_code, "item_group")
                 if group:
                     item_groups.append(group)
- 
+
         unique_groups = set(item_groups)
         year = frappe.utils.now_datetime().year
- 
+
         # Define mapping from item_group to naming series
         series_map = {
             "Drug": f"DRUG-SINV-{year}-",
@@ -151,32 +151,33 @@ def createSalesInvoice():
             "Sub Assemblies": f"SUB-SINV-{year}-",
             "Demo Item Group": f"DEMO-SINV-{year}-",
         }
- 
+
         # Determine final series
         if len(unique_groups) == 1:
             group = list(unique_groups)[0]
             naming_series = series_map.get(group, f"ACC-SINV-.YYYY.-")
         else:
             naming_series = f"ACC-SINV-.YYYY.-"  # fallback for multiple/missing groups
- 
+
+        # Remove naming_series from incoming data if exists
+        data.pop("naming_series", None)
+
         # Create Sales Invoice
         doc = frappe.new_doc("Sales Invoice")
-        doc.naming_series = naming_series
         doc.update(data)
- 
-        # Ensure naming_series is not overwritten
-        if not doc.naming_series:
-            doc.naming_series = naming_series
- 
+
+        # Set naming series after update
+        doc.naming_series = naming_series
+
         doc.insert(ignore_permissions=True)
         frappe.db.commit()
- 
+
         return {
             "message": "Sales Invoice created successfully",
             "name": doc.name,
             "series_used": naming_series
         }
- 
+
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Create Sales Invoice API")
         return {"error": str(e)}
