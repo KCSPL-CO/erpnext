@@ -20,6 +20,9 @@
   "posting_time",
   "set_posting_time",
   "due_date",
+  "inpatient_record",
+  "practitioner",
+  "practitioner_name",
   "column_break_14",
   "is_pos",
   "pos_profile",
@@ -2189,6 +2192,25 @@
    "fieldname": "paid_date",
    "fieldtype": "Date",
    "label": "Paid Date"
+  },
+  {
+   "fieldname": "inpatient_record",
+   "fieldtype": "Link",
+   "label": "Inpatient Record",
+   "options": "Inpatient Record"
+  },
+  {
+   "fetch_from": "inpatient_record.primary_practitioner",
+   "fieldname": "practitioner",
+   "fieldtype": "Link",
+   "label": "Practitioner",
+   "options": "Healthcare Practitioner"
+  },
+  {
+   "fetch_from": "practitioner.practitioner_name",
+   "fieldname": "practitioner_name",
+   "fieldtype": "Data",
+   "label": "Practitioner Name"
   }
  ],
  "grid_page_length": 50,
@@ -2202,7 +2224,7 @@
    "link_fieldname": "consolidated_invoice"
   }
  ],
- "modified": "2025-07-23 11:48:22.383324",
+ "modified": "2025-08-04 13:17:09.701399",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice",

@@ -168,6 +168,13 @@ def createSalesInvoice():
 
         # Set naming series after update
         doc.naming_series = naming_series
+        # Apply taxes_and_charges and fetch taxes from template
+        if data.get("taxes_and_charges"):
+            doc.taxes_and_charges = data["taxes_and_charges"]
+
+        # This will trigger tax template fetch
+        doc.set_missing_values()
+
 
         doc.insert(ignore_permissions=True)
         frappe.db.commit()
@@ -814,6 +821,8 @@ def get_items_from_healthcare(patient=None, customer=None, company=None, item_ty
                     item["order_date"] = doc.order_date
                     item["practitioner"] = doc.practitioner
                     item["practitioner_name"] = doc.practitioner_name
+                    item["department"] = doc.medical_department
+                    
 
                     # ✅ Fetch token from Patient Encounter using order_group
                     token = frappe.db.get_value("Patient Encounter", {"name": doc.order_group}, "token")
