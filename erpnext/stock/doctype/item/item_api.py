@@ -526,7 +526,7 @@ def listStockEntries():
 	try:
 		se_list = frappe.get_all(
 			"Stock Entry",
-			fields=["name", "purpose", "stock_entry_type", "posting_date", "company"],
+			fields=["name", "purpose", "stock_entry_type", "posting_date", "company","status","from_warehouse","to_warehouse","Supplier"],
 			order_by="creation desc",
 			# limit_page_length=20
 		)
@@ -553,6 +553,70 @@ def createStockEntry():
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Create Stock Entry API")
 		return {"error": str(e)}
+
+@frappe.whitelist(allow_guest=False)
+def create_stock_entry_from_material_request():
+    user = authenticate_user()
+    if not user:
+        return {"status": "error", "message": "Unauthorized"}
+ 
+    try:
+        data = frappe.local.form_dict
+        material_request_id = data.get("material_request_id")
+ 
+        if not material_request_id:
+            frappe.throw(_("Material Request ID is required"))
+ 
+        material_request = frappe.get_doc("Material Request", material_request_id)
+ 
+        if material_request.docstatus != 1:
+            return {"status": "error", "message": "Material Request must be submitted"}
+ 
+        # Use the purpose from the Material Request (it becomes stock_entry_type)
+        stock_entry_type = material_request.material_request_type
+ 
+    
+        # Safely extract from and to warehouse from first item
+        first_item = material_request.items[0]
+        from_warehouse = first_item.from_warehouse
+        to_warehouse = first_item.warehouse
+ 
+        if not from_warehouse or not to_warehouse:
+            return {"status": "error", "message": "Both from_warehouse and to_warehouse are required on Material Request items"}
+ 
+        # Create Stock Entry
+        stock_entry = frappe.new_doc("Stock Entry")
+        stock_entry.stock_entry_type = stock_entry_type
+        stock_entry.from_warehouse = from_warehouse
+        stock_entry.to_warehouse = to_warehouse
+        stock_entry.material_request = material_request.name
+ 
+        for item in material_request.items:
+            stock_entry.append("items", {
+                "item_code": item.item_code,
+                "qty": item.qty,
+                "uom": item.uom,
+                "s_warehouse": item.from_warehouse,
+                "t_warehouse": item.warehouse,
+                "material_request": material_request.name,
+                "material_request_item": item.name
+            })
+ 
+        stock_entry.insert(ignore_permissions=True)
+        frappe.db.commit()
+ 
+        return {
+            "status": "success",
+            "message": f"Stock Entry {stock_entry.name} created",
+            "stock_entry": stock_entry.name
+        }
+ 
+    except frappe.DoesNotExistError:
+        return {"status": "error", "message": "Material Request not found"}
+ 
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "create_stock_entry_from_material_request")
+        return {"status": "error", "message": str(e)} 
 
 @frappe.whitelist(allow_guest=True)
 def filterStockEntries():
