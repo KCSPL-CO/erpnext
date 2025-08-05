@@ -515,25 +515,68 @@ def getMaterialRequestDetails():
 
 # -------------------- Stock Entry APIs --------------------
 
+# @frappe.whitelist(allow_guest=True)
+# def listStockEntries():
+# 	if frappe.request.method != "GET":
+# 		frappe.local.response["http_status_code"] = 405
+# 		return {"error": "Only GET method allowed"}
+# 	if not authenticate_user():
+# 		return {"error": "Unauthorized"}
+
+# 	try:
+# 		se_list = frappe.get_all(
+# 			"Stock Entry",
+# 			fields=["name", "purpose", "stock_entry_type", "posting_date", "company","status","from_warehouse","to_warehouse","Supplier"],
+# 			order_by="creation desc",
+# 			# limit_page_length=20
+# 		)
+# 		return {"message": se_list}
+# 	except Exception as e:
+# 		frappe.log_error(frappe.get_traceback(), "List Stock Entry API")
+# 		return {"error": str(e)}
+
 @frappe.whitelist(allow_guest=True)
 def listStockEntries():
-	if frappe.request.method != "GET":
-		frappe.local.response["http_status_code"] = 405
-		return {"error": "Only GET method allowed"}
-	if not authenticate_user():
-		return {"error": "Unauthorized"}
+    if frappe.request.method != "GET":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only GET method allowed"}
+    
+    if not authenticate_user():
+        return {"error": "Unauthorized"}
 
-	try:
-		se_list = frappe.get_all(
-			"Stock Entry",
-			fields=["name", "purpose", "stock_entry_type", "posting_date", "company","status","from_warehouse","to_warehouse","Supplier"],
-			order_by="creation desc",
-			# limit_page_length=20
-		)
-		return {"message": se_list}
-	except Exception as e:
-		frappe.log_error(frappe.get_traceback(), "List Stock Entry API")
-		return {"error": str(e)}
+    try:
+        entries = frappe.get_all(
+            "Stock Entry",
+            fields=["name"],
+            order_by="creation desc",
+            limit_page_length=20
+        )
+
+        stock_entries = []
+        for e in entries:
+            doc = frappe.get_doc("Stock Entry", e.name)
+            stock_entries.append({
+                "name": doc.name,
+                "purpose": doc.purpose,
+                "stock_entry_type": doc.stock_entry_type,
+                "posting_date": doc.posting_date,
+                "company": doc.company,
+                "status": (
+                    "Draft" if doc.docstatus == 0 else
+                    "Submitted" if doc.docstatus == 1 else
+                    "Cancelled"
+                ),
+                "from_warehouse": doc.from_warehouse,
+                "to_warehouse": doc.to_warehouse,
+                "supplier": doc.supplier
+            })
+
+        return {"message": stock_entries}
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "List Stock Entry API")
+        return {"error": str(e)}
+
 
 @frappe.whitelist(allow_guest=True)
 def createStockEntry():
