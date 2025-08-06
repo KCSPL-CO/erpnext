@@ -689,31 +689,53 @@ def filterStockEntries():
 		frappe.log_error(frappe.get_traceback(), "Filter Stock Entry API")
 		return {"error": str(e)}
 
+
 @frappe.whitelist(allow_guest=True)
 def updateStockEntry():
-	if frappe.request.method != "POST":
-		frappe.local.response["http_status_code"] = 405
-		return {"error": "Only POST method allowed"}
-	if not authenticate_user():
-		return {"error": "Unauthorized"}
-
-	data = frappe.request.get_json()
-	id = data.get("name") or data.get("id")
-	if not id:
-		return {"error": "Missing Stock Entry ID"}
-
-	try:
-		doc = frappe.get_doc("Stock Entry", id)
-		doc.update(data)
-		doc.save(ignore_permissions=True)
-		frappe.db.commit()
-		return {"message": "Stock Entry updated successfully", "updated_data": doc.as_dict()}
-	except frappe.DoesNotExistError:
-		frappe.local.response["http_status_code"] = 404
-		return {"error": "Stock Entry not found"}
-	except Exception as e:
-		frappe.log_error(frappe.get_traceback(), "Update Stock Entry API")
-		return {"error": str(e)}
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+ 
+    if not authenticate_user():
+        return {"error": "Unauthorized"}
+ 
+    data = frappe.request.get_json()
+    id = data.get("name") or data.get("id")
+    if not id:
+        return {"error": "Missing Stock Entry ID"}
+ 
+    try:
+        # Fetch the doc
+        doc = frappe.get_doc("Stock Entry", id)
+        doc.update(data)
+ 
+        if data.get("docstatus") == 1:
+            # Try to submit directly, will trigger validation
+            doc.submit()
+        else:
+            doc.save(ignore_permissions=True)
+ 
+        frappe.db.commit()
+        return {
+            "message": "Stock Entry updated successfully",
+            "updated_data": doc.as_dict()
+        }
+ 
+    except frappe.DoesNotExistError:
+        frappe.local.response["http_status_code"] = 404
+        return {"error": "Stock Entry not found"}
+ 
+    except frappe.ValidationError as ve:
+        frappe.local.response["http_status_code"] = 400
+        frappe.db.rollback()  # VERY IMPORTANT: rollback if error occurs
+        return {"error": f"Validation Error: {str(ve)}"}
+ 
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Update Stock Entry API")
+        frappe.local.response["http_status_code"] = 500
+        frappe.db.rollback()
+        return {"error": str(e)}
+ 
 
 @frappe.whitelist(allow_guest=True)
 def deleteStockEntry():
