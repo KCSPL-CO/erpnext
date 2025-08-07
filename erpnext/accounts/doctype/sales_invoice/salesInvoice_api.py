@@ -1289,3 +1289,167 @@ def count_account_types():
         frappe.log_error(frappe.get_traceback(), "Account Type Count API")
         frappe.local.response["http_status_code"] = 500
         return {"error": str(e)}
+
+
+
+# print 
+
+@frappe.whitelist(allow_guest=True)
+def get_sales_details_with_patient_info():
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+
+    user = authenticate_user()
+    if not user:
+        return {"error": "Unauthorized"}
+
+    data = frappe.request.get_json()
+    name = data.get("name") or data.get("id")
+    doctype = data.get("doctype", "Sales Order")  # Default to Sales Order
+
+    if not name:
+        frappe.local.response["http_status_code"] = 400
+        return {"error": "Missing Sales Order or Invoice name"}
+
+    if doctype not in ["Sales Order", "Sales Invoice"]:
+        frappe.local.response["http_status_code"] = 400
+        return {"error": "Invalid doctype. Must be 'Sales Order' or 'Sales Invoice'"}
+
+    try:
+        doc = frappe.get_doc(doctype, name)
+    except frappe.DoesNotExistError:
+        frappe.local.response["http_status_code"] = 404
+        return {"error": f"{doctype} {name} not found"}
+
+    patient_info, inpatient_info, address_list = {}, {}, []
+
+    # Patient details
+    if doc.patient:
+        try:
+            patient = frappe.get_doc("Patient", doc.patient)
+            patient_info = {
+                "name": patient.name,
+                "patient_name": patient.patient_name,
+                "sex": patient.sex,
+                "dob": patient.dob,
+                "customer": patient.customer,
+                "email": patient.email,
+                "mobile": patient.mobile,
+                "marital_status": patient.marital_status,
+            }
+            address_list = frappe.get_all("Address", filters={"link_name": patient.name}, fields=["*"])
+        except frappe.DoesNotExistError:
+            patient_info = {"error": f"Patient {doc.patient} not found"}
+
+    # Inpatient Record
+    if doc.inpatient_record:
+        try:
+            inpatient = frappe.get_doc("Inpatient Record", doc.inpatient_record)
+            inpatient_info = {
+                "scheduled_date": inpatient.scheduled_date,
+                "service_unit__ward": inpatient.service_unit__ward,
+                "primary_practitioner": inpatient.primary_practitioner,
+                "primary_healthcare_practitioner_name": inpatient.primary_healthcare_practitioner_name,
+                "medical_department": inpatient.medical_department,
+                "ip_status": inpatient.ip_status,
+                "expected_discharge": inpatient.expected_discharge,
+                "admission_service_unit_type": inpatient.admission_service_unit_type,
+                "admitted_datetime": inpatient.admitted_datetime,
+                "billing_type": inpatient.billing_type,
+                "mode_of_payment": inpatient.mode_of_payment,
+                "mou": inpatient.mou,
+                "insurance_company": inpatient.insurance_company,
+                "tpa": inpatient.tpa,
+                "claim_stage": inpatient.claim_stage,
+                "preauth_status": inpatient.preauth_status,
+                "claim_id": inpatient.claim_id,
+                "discharge_ordered_date": inpatient.discharge_ordered_date,
+                "discharge_practitioner": inpatient.discharge_practitioner,
+                "discharge_datetime": inpatient.discharge_datetime,
+            }
+        except frappe.DoesNotExistError:
+            inpatient_info = {"error": f"Inpatient Record {doc.inpatient_record} not found"}
+
+    # Sales/Invoice Items
+    items = []
+    for item in doc.items:
+        item_data = {
+            "item_code": item.item_code,
+            "item_group": item.item_group,
+            "item_name": item.item_name,
+            "qty": item.qty,
+            "rate": item.rate,
+            "reference_dn": item.reference_dn,
+            "reference_dt": item.reference_dt,
+            "creation": item.creation,
+        }
+
+        # Correct delivery field per Doctype
+        if doctype == "Sales Order":
+            item_data["delivery_date"] = item.delivery_date
+        elif doctype == "Sales Invoice":
+            item_data["delivered_date"] = item.delivered_date
+
+        # Handle Patient Encounter
+        if item.reference_dt == "Patient Encounter" and item.reference_dn:
+            try:
+                encounter = frappe.get_doc("Patient Encounter", item.reference_dn)
+                practitioner_name = encounter.practitioner_name or ""
+                item_data["item_name"] = f"Inpatient Visit Charge ({practitioner_name})"
+            except frappe.DoesNotExistError:
+                item_data["item_name"] = "Inpatient Visit Charge (Unknown Practitioner)"
+
+        items.append(item_data)
+
+
+    # Taxes (child table)
+    taxes = []
+    for tax in doc.taxes:
+        taxes.append({
+            "charge_type": tax.charge_type,
+            "account_head": tax.account_head,
+            "description": tax.description,
+            "rate": tax.rate,
+            "tax_amount": tax.tax_amount,
+            "total": tax.total,
+            "tax_amount_after_discount_amount": tax.tax_amount_after_discount_amount,
+        })
+
+    # Totals and common financials
+    financial_info = {
+        "total_qty": doc.total_qty,
+        "total": doc.total,
+        "tax_category": doc.tax_category,
+        "taxes_and_charges": doc.taxes_and_charges,
+        "taxes": taxes,
+        "total_taxes_and_charges": doc.total_taxes_and_charges,
+        "grand_total": doc.grand_total,
+        "rounding_adjustment": doc.rounding_adjustment,
+        "rounded_total": doc.rounded_total,
+        "in_words": doc.in_words,
+        "apply_discount_on": doc.apply_discount_on,
+        "additional_discount_percentage": doc.additional_discount_percentage,
+        "discount_amount": doc.discount_amount,
+    }
+
+    # Additional per-doctype fields
+    if doctype == "Sales Order":
+        financial_info["advance_paid"] = doc.advance_paid
+    elif doctype == "Sales Invoice":
+        financial_info["total_advance"] = doc.total_advance
+        financial_info["outstanding_amount"] = doc.outstanding_amount
+        financial_info["paid_date"] = doc.paid_date
+
+
+    return {
+        "message": {
+            "doctype": doctype,
+            "name": doc.name,
+            "patient": patient_info,
+            "inpatient_record": inpatient_info,
+            "address": address_list,
+            "items": items,
+            "financials": financial_info
+        }
+    }

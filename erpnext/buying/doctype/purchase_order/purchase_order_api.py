@@ -346,3 +346,90 @@ def list_purchase_order_receipt_summary():
 		frappe.log_error(frappe.get_traceback(), "Combined PO-PR Summary API")
 		frappe.local.response["http_status_code"] = 500
 		return {"error": str(e)}
+
+
+# ################################################ created by Vaishnavi #######################################
+
+@frappe.whitelist(allow_guest=True)
+def submit_purchase_order():
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+ 
+    user = authenticate_user()
+    if not user:
+        return {"error": "Unauthorized"}
+ 
+    try:
+        data = json.loads(frappe.request.get_data(as_text=True))
+        po_name = data.get("name")
+        if not po_name:
+            return {"error": "Missing Purchase Order name"}
+ 
+        doc = frappe.get_doc("Purchase Order", po_name)
+ 
+        if doc.docstatus == 0:
+            doc.submit()
+            frappe.db.commit()
+            return {"message": "Purchase Order submitted", "name": doc.name}
+        else:
+            return {
+                "message": "Purchase Order already submitted or cancelled",
+                "docstatus": doc.docstatus
+            }
+ 
+    except frappe.DoesNotExistError:
+        frappe.local.response["http_status_code"] = 404
+        return {"error": "Purchase Order not found"}
+ 
+    except frappe.ValidationError as ve:
+        frappe.local.response["http_status_code"] = 400
+        return {"error": f"Validation Error: {str(ve)}"}
+ 
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Submit Purchase Order API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
+ 
+ 
+ 
+ 
+ 
+@frappe.whitelist()
+def cancel_purchase_order():
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+ 
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+ 
+    try:
+        data = frappe.request.get_json()
+        po_name = data.get("name") or data.get("id")
+        if not po_name:
+            return {"error": "Missing Purchase Order ID"}
+ 
+        doc = frappe.get_doc("Purchase Order", po_name)
+ 
+        if doc.docstatus != 1:
+            return {"error": f"Cannot cancel Purchase Order '{po_name}' as it is not submitted."}
+ 
+        doc.cancel()
+        frappe.db.commit()
+ 
+        return {"message": f"Purchase Order {po_name} has been cancelled successfully"}
+ 
+    except frappe.DoesNotExistError:
+        frappe.local.response["http_status_code"] = 404
+        return {"error": "Purchase Order not found"}
+ 
+    except frappe.ValidationError as ve:
+        frappe.local.response["http_status_code"] = 400
+        return {"error": f"Validation Error: {str(ve)}"}
+ 
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Cancel Purchase Order API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
