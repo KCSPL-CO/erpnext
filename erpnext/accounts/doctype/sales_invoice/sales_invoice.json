@@ -723,6 +723,7 @@
   },
   {
    "allow_bulk_edit": 1,
+   "allow_on_submit": 1,
    "fieldname": "items",
    "fieldtype": "Table",
    "hide_days": 1,
@@ -2183,10 +2184,10 @@
    "print_hide": 1
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "customer_token",
    "fieldtype": "Data",
-   "label": "Customer Token",
-   "read_only": 1
+   "label": "Customer Token"
   },
   {
    "allow_on_submit": 1,
@@ -2231,7 +2232,7 @@
    "link_fieldname": "consolidated_invoice"
   }
  ],
- "modified": "2025-08-11 10:13:12.773389",
+ "modified": "2025-08-11 13:39:06.611067",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice",

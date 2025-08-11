@@ -1401,6 +1401,17 @@ def get_sales_details_with_patient_info():
             except frappe.DoesNotExistError:
                 item_data["item_name"] = "Inpatient Visit Charge (Unknown Practitioner)"
 
+        # items.append(item_data)
+
+                # Handle Patient Appointment
+        if item.reference_dt == "Patient Appointment" and item.reference_dn:
+            try:
+                encounter = frappe.get_doc("Patient Appointment", item.reference_dn)
+                practitioner_name = encounter.practitioner_name or ""
+                item_data["item_name"] = f"Outpatient Visit ({practitioner_name})"
+            except frappe.DoesNotExistError:
+                item_data["item_name"] = "Inpatient Visit Charge (Unknown Practitioner)"
+
         items.append(item_data)
 
 
