@@ -433,3 +433,216 @@ def cancel_purchase_order():
         frappe.log_error(frappe.get_traceback(), "Cancel Purchase Order API")
         frappe.local.response["http_status_code"] = 500
         return {"error": str(e)}
+	
+@frappe.whitelist()
+def create_purchase_order_from_material_request():
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+ 
+    if not authenticate_user():
+        return {"error": "Unauthorized"}
+ 
+    try:
+        data = frappe.request.get_json()
+        mr_name = data.get("id")
+        supplier = data.get("supplier")
+ 
+        if not mr_name or not supplier:
+            return {"error": "Missing Material Request ID or Supplier"}
+ 
+        mr_doc = frappe.get_doc("Material Request", mr_name)
+ 
+        if mr_doc.docstatus != 1:
+            return {"error": f"Material Request {mr_name} must be submitted"}
+ 
+        po = frappe.new_doc("Purchase Order")
+        po.supplier = supplier
+        po.schedule_date = frappe.utils.nowdate()
+        po.material_request = mr_name
+        po.set_warehouse = mr_doc.set_warehouse
+ 
+        # Manually copy items with target_warehouse
+        for item in mr_doc.items:
+            po.append("items", {
+                "item_code": item.item_code,
+                "item_name": item.item_name,
+                "description": item.description,
+                "qty": item.qty,
+                "uom": item.uom,
+                "stock_uom": item.stock_uom,
+                "conversion_factor": item.conversion_factor,
+                "rate": item.rate,
+                "warehouse": item.warehouse,  # This is target warehouse in MR
+                "schedule_date": frappe.utils.nowdate(),
+                "material_request": mr_name,
+                "material_request_item": item.name,
+            })
+ 
+        po.insert()
+        # frappe.db.commit()
+ 
+        return {
+            "message": f"Purchase Order {po.name} created from Material Request {mr_name}",
+            "purchase_order": po.name
+        }
+ 
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Create PO from MR API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
+	
+@frappe.whitelist()
+def get_all_suppliers(search_text=None):
+ 
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+    filters = {}
+    if search_text:
+        filters["supplier_name"] = ["like", f"%{search_text}%"]
+ 
+    suppliers = frappe.get_all(
+        "Supplier",
+        fields=["name", "supplier_name"],
+        filters=filters,
+        limit_page_length=50,
+        order_by="modified desc"
+    )
+ 
+    return suppliers
+
+@frappe.whitelist(allow_guest=False)  # set True only if guests can access
+def get_purchase_receipt_by_id():
+ 
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+ 
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+    """
+    Fetch Purchase Receipt document by ID from POST body.
+    """
+    data = frappe.form_dict  # Works for both GET and POST JSON form data
+    pr_id = data.get("pr_id")
+ 
+    if not pr_id:
+        frappe.throw(_("Purchase Receipt ID is required"))
+ 
+    # get_doc ensures child tables are also fetched
+    doc = frappe.get_doc("Purchase Receipt", pr_id)
+    return doc
+
+
+@frappe.whitelist()
+def make_purchase_receipt_from_po():
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+    data = frappe.request.get_json()
+    source_name = data.get("source_name")
+
+    if not source_name:
+        frappe.throw("Missing source_name in request body")
+
+    from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_receipt
+
+    pr_doc = make_purchase_receipt(source_name)
+    pr_doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {"name": pr_doc.name}
+
+import json
+from frappe import _
+@frappe.whitelist(allow_guest=False)
+def update_purchase_receipt():
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+    data = frappe.request.get_json()  # ✅ THIS reads raw JSON body
+
+    if not data:
+        frappe.throw("No JSON data provided.")
+
+    purchase_receipt_name = data.get("purchase_receipt_name")
+    items_data = data.get("items", [])
+    set_warehouse = data.get("set_warehouse")
+    rejected_warehouse = data.get("rejected_warehouse")
+
+    if not purchase_receipt_name or not items_data:
+        frappe.throw("Missing purchase_receipt_name or items")
+
+    pr = frappe.get_doc("Purchase Receipt", purchase_receipt_name)
+
+    if set_warehouse:
+        pr.set_warehouse = set_warehouse
+
+    if rejected_warehouse:
+        pr.rejected_warehouse = rejected_warehouse
+
+    for item in items_data:
+        item_code = item.get("item_code")
+        if not item_code:
+            continue
+
+        received_qty = item.get("received_qty")
+        accepted_qty = item.get("accepted_qty")
+        rejected_qty = item.get("rejected_qty")
+
+        for pr_item in pr.items:
+            if pr_item.item_code == item_code:
+                pr_item.received_qty = received_qty
+                pr_item.qty = accepted_qty
+                pr_item.rejected_qty = rejected_qty
+                break
+
+    pr.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {"message": "Purchase Receipt updated", "doc": pr}
+
+@frappe.whitelist()
+def submit_purchase_receipt():
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+
+    data = frappe.request.get_json()
+
+    if not data:
+        frappe.throw("No input data received")
+
+    receipt_id = data.get("id")
+    if not receipt_id:
+        frappe.throw("Missing purchase_receipt_name")
+
+    # Make sure it's a Purchase Receipt
+    pr = frappe.get_doc("Purchase Receipt", receipt_id)
+
+    if pr.docstatus != 0:
+        frappe.throw("Purchase Receipt is already submitted or cancelled")
+
+    pr.submit()
+    frappe.db.commit()
+
+    return {
+        "message": f"Purchase Receipt {receipt_id} submitted successfully",
+        "docstatus": pr.docstatus
+    }
+
+

@@ -1347,6 +1347,7 @@ def get_sales_details_with_patient_info():
         try:
             inpatient = frappe.get_doc("Inpatient Record", doc.inpatient_record)
             inpatient_info = {
+                "name":doc.inpatient_record,
                 "scheduled_date": inpatient.scheduled_date,
                 "service_unit__ward": inpatient.service_unit__ward,
                 "primary_practitioner": inpatient.primary_practitioner,
