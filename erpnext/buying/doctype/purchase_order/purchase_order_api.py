@@ -1,6 +1,7 @@
 import base64
 
 import frappe
+from erpnext.controllers.sales_and_purchase_return import make_return_doc
 from frappe.utils import cint
 from frappe import _
 import json
@@ -646,3 +647,97 @@ def submit_purchase_receipt():
     }
 
 
+# Purchase Return 
+
+@frappe.whitelist()
+def make_custom_purchase_return_against_rejected_warehouse():
+    """
+    Creates and submits a Purchase Return document against rejected warehouse
+    for the given Purchase Receipt.
+    """
+    # Allow only POST requests
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+ 
+    # Authentication check (assuming authenticate_user is defined elsewhere)
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+ 
+    # Get data from request body
+    source_name = frappe.form_dict.get("source_name")
+    if not source_name:
+        return {"error": "Missing required parameter: source_name"}
+ 
+    # Step 1: Create return document
+    return_doc = make_return_doc(
+        "Purchase Receipt",
+        source_name,
+        return_against_rejected_qty=True
+    )
+ 
+    # Step 2: Insert into DB
+    return_doc.insert(ignore_permissions=True)
+ 
+    # Step 3: Submit document
+    return_doc.submit()
+ 
+    # Step 4: Commit and respond
+    frappe.db.commit()
+    return {
+        "status": "success",
+        "message": "Purchase Return created and submitted successfully",
+        "purchase_receipt_name": source_name,  # Original PR name
+        "purchase_return_name": return_doc.name  # New PR Return name
+    }
+ 
+ 
+
+@frappe.whitelist()
+def make_custom_purchase_return():
+    """
+    Creates and submits a Purchase Return for the given Purchase Receipt.
+    If target_doc is passed, it will use that; otherwise, it creates a new one.
+    """
+ 
+    # Step 0: Only allow POST
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+ 
+    # Step 1: Authentication check
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+ 
+    # Step 2: Parse request body (works for form-data or JSON)
+    source_name = frappe.form_dict.get("source_name")
+    target_doc = frappe.form_dict.get("target_doc")  # optional
+ 
+    if not source_name:
+        return {"error": "Missing required parameter: source_name"}
+ 
+    # Step 3: Create return document
+    return_doc = make_return_doc(
+        "Purchase Receipt",
+        source_name,
+        target_doc
+    )
+ 
+    # Step 4: Insert into DB
+    return_doc.insert(ignore_permissions=True)
+ 
+    # Step 5: Submit document
+    return_doc.submit()
+ 
+    # Step 6: Commit transaction and return success
+    frappe.db.commit()
+    return {
+        "status": "success",
+        "message": "Purchase Return created and submitted successfully",
+        "purchase_return_name": return_doc.name,
+        "purchase_receipt_name": source_name  # ✅ Added original PR reference
+    }
+ 
+ 
