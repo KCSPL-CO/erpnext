@@ -23,6 +23,8 @@
   "inpatient_record",
   "practitioner",
   "practitioner_name",
+  "is_ip_bill",
+  "is_op_bill",
   "column_break_14",
   "is_pos",
   "pos_profile",
@@ -2219,6 +2221,18 @@
    "fieldname": "medical_department",
    "fieldtype": "Data",
    "label": "Medical Department"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_ip_bill",
+   "fieldtype": "Check",
+   "label": "is_ip_bill"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_op_bill",
+   "fieldtype": "Check",
+   "label": "is_op_bill "
   }
  ],
  "grid_page_length": 50,
@@ -2232,7 +2246,7 @@
    "link_fieldname": "consolidated_invoice"
   }
  ],
- "modified": "2025-08-11 13:39:06.611067",
+ "modified": "2025-08-19 15:33:02.339083",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice",
