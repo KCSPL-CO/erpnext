@@ -28,6 +28,8 @@ class SalesInvoiceItem(Document):
 		base_rate_with_margin: DF.Currency
 		batch_no: DF.Link | None
 		brand: DF.Data | None
+		cgst_amount: DF.Data | None
+		cgst_rate: DF.Data | None
 		company_total_stock: DF.Float
 		conversion_factor: DF.Float
 		cost_center: DF.Link
@@ -48,6 +50,8 @@ class SalesInvoiceItem(Document):
 		finance_book: DF.Link | None
 		grant_commission: DF.Check
 		has_item_scanned: DF.Check
+		igst_amount: DF.Data | None
+		igst_rate: DF.Data | None
 		image: DF.Attach | None
 		income_account: DF.Link
 		incoming_rate: DF.Currency
@@ -84,11 +88,14 @@ class SalesInvoiceItem(Document):
 		service_end_date: DF.Date | None
 		service_start_date: DF.Date | None
 		service_stop_date: DF.Date | None
+		sgst_amount: DF.Data | None
+		sgst_rate: DF.Data | None
 		so_detail: DF.Data | None
 		stock_qty: DF.Float
 		stock_uom: DF.Link | None
 		stock_uom_rate: DF.Currency
 		target_warehouse: DF.Link | None
+		total_amount: DF.Currency
 		total_weight: DF.Float
 		uom: DF.Link
 		use_serial_batch_fields: DF.Check

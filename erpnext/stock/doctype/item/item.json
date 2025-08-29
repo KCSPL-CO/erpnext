@@ -107,6 +107,8 @@
   "customer_items",
   "item_tax_section_break",
   "taxes",
+  "item_tax_template",
+  "tax_details",
   "quality_tab",
   "inspection_required_before_purchase",
   "quality_inspection_template",
@@ -909,6 +911,18 @@
    "oldfieldname": "item_group",
    "oldfieldtype": "Link",
    "options": "Item Group"
+  },
+  {
+   "fieldname": "item_tax_template",
+   "fieldtype": "Link",
+   "label": "Item Tax Template",
+   "options": "Item Tax Template"
+  },
+  {
+   "fieldname": "tax_details",
+   "fieldtype": "Table",
+   "label": "Tax Details",
+   "options": "Item Tax Details"
   }
  ],
  "icon": "fa fa-tag",
@@ -916,7 +930,7 @@
  "image_field": "image",
  "links": [],
  "make_attachments_public": 1,
- "modified": "2025-08-12 18:07:01.388146",
+ "modified": "2025-08-28 17:09:21.649968",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Item",

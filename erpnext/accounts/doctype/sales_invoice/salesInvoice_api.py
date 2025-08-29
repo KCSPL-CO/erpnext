@@ -131,11 +131,119 @@ def createSalesInvoice():
         ]
         item_groups = []
 
-        for item_code in item_codes:
+# Enrich items with default item_tax_template from Item master
+        # enriched_items = []
+        # for item in data.get("items", []):
+        #     cgst_rate = sgst_rate = igst_rate = 0
+        #     cgst_amt = sgst_amt = igst_amt = 0
+
+        #     item_code = item.get("item_code")
+        #     # choose a numeric base for taxes
+        #     base_amount = item.get("amount")
+        #     if base_amount is None:
+        #         base_amount = (item.get("rate", 0) or 0) * (item.get("qty", 0) or 0)
+
+        #     if item_code:
+        #         # fetch first item_tax_template linked on Item (Item Tax child table)
+        #         item_tax_template = frappe.db.get_value(
+        #             "Item Tax",
+        #             {"parent": item_code},
+        #             "item_tax_template"
+        #         )
+
+        #         if item_tax_template:
+        #             item["item_tax_template"] = item_tax_template
+        #             try:
+        #                 template = frappe.get_doc("Item Tax Template", item_tax_template)
+        #                 for t in template.taxes:
+        #                     tax_type = (t.tax_type or "").upper()
+        #                     rate = float(t.tax_rate or 0)
+        #                     if "CGST" in tax_type:
+        #                         cgst_rate = rate
+        #                         cgst_amt = round(base_amount * rate / 100.0, 2)
+        #                     elif "SGST" in tax_type:
+        #                         sgst_rate = rate
+        #                         sgst_amt = round(base_amount * rate / 100.0, 2)
+        #                     elif "IGST" in tax_type:
+        #                         igst_rate = rate
+        #                         igst_amt = round(base_amount * rate / 100.0, 2)
+        #             except frappe.DoesNotExistError:
+        #                 pass
+
+        #     item["cgst_rate"] = cgst_rate
+        #     item["cgst_amount"] = cgst_amt
+        #     item["sgst_rate"] = sgst_rate
+        #     item["sgst_amount"] = sgst_amt
+        #     item["igst_rate"] = igst_rate
+        #     item["igst_amount"] = igst_amt
+
+        #     enriched_items.append(item)
+
+        # data["items"] = enriched_items
+        # Enrich items with default item_tax_template from Item master
+        enriched_items = []
+
+        for item in data.get("items", []):
+            # Reset per line
+            cgst_rate = sgst_rate = igst_rate = 0.0
+            cgst_amt = sgst_amt = igst_amt = 0.0
+
+            item_code = item.get("item_code")
+            qty = float(item.get("qty") or 0)
+            rate = float(item.get("rate") or 0)
+            base_amount = round(qty * rate, 2)  # amount = qty * rate
+
+            # Default: total = base, unless a template is applied (and yields tax amounts)
+            total_amount = base_amount
+
             if item_code:
-                group = frappe.db.get_value("Item", item_code, "item_group")
-                if group:
-                    item_groups.append(group)
+                # Fetch first Item Tax Template linked on Item (child table: Item Tax)
+                item_tax_template = frappe.db.get_value(
+                    "Item Tax",
+                    {"parent": item_code},
+                    "item_tax_template"
+                )
+
+                if item_tax_template:
+                    item["item_tax_template"] = item_tax_template
+
+                    try:
+                        template = frappe.get_doc("Item Tax Template", item_tax_template)
+                        for t in template.taxes:
+                            tax_type = (t.tax_type or "").upper()
+                            rate_pct = float(t.tax_rate or 0)
+
+                            if "CGST" in tax_type:
+                                cgst_rate = rate_pct
+                                cgst_amt = round(base_amount * rate_pct / 100.0, 2)
+                            elif "SGST" in tax_type:
+                                sgst_rate = rate_pct
+                                sgst_amt = round(base_amount * rate_pct / 100.0, 2)
+                            elif "IGST" in tax_type:
+                                igst_rate = rate_pct
+                                igst_amt = round(base_amount * rate_pct / 100.0, 2)
+
+                        # If a template exists, total = base + all tax amounts
+                        total_amount = round(base_amount + cgst_amt + sgst_amt + igst_amt, 2)
+
+                    except frappe.DoesNotExistError:
+                        # Keep taxes at zero and total as base_amount
+                        pass
+
+            # Write computed fields back to the line
+            item["base_amount"] = base_amount
+            item["cgst_rate"] = cgst_rate
+            item["cgst_amount"] = cgst_amt
+            item["sgst_rate"] = sgst_rate
+            item["sgst_amount"] = sgst_amt
+            item["igst_rate"] = igst_rate
+            item["igst_amount"] = igst_amt
+            item["total_amount"] = total_amount
+
+            enriched_items.append(item)
+
+        data["items"] = enriched_items
+
 
         unique_groups = set(item_groups)
         year = frappe.utils.now_datetime().year
@@ -166,8 +274,21 @@ def createSalesInvoice():
         doc = frappe.new_doc("Sales Invoice")
         doc.update(data)
 
+        # 🔹 Add taxes from each item's item_tax_template into Sales Invoice Taxes
+        for item in enriched_items:
+            if item.get("item_tax_template"):
+                template = frappe.get_doc("Item Tax Template", item["item_tax_template"])
+
+                for tax in template.taxes:
+                    doc.append("taxes", {
+                        "charge_type": "On Net Total",     # standard for GST
+                        "account_head": tax.tax_type,      # comes from template
+                        "rate": tax.tax_rate,              # GST percentage
+                        "description": item.get("item_name") or item.get("description") or ""
+                    })
         # Set naming series after update
         doc.naming_series = naming_series
+
         # Apply taxes_and_charges and fetch taxes from template
         if data.get("taxes_and_charges"):
             doc.taxes_and_charges = data["taxes_and_charges"]
@@ -175,14 +296,14 @@ def createSalesInvoice():
         # This will trigger tax template fetch
         doc.set_missing_values()
 
-
         doc.insert(ignore_permissions=True)
         frappe.db.commit()
 
         return {
             "message": "Sales Invoice created successfully",
             "name": doc.name,
-            "series_used": naming_series
+            "series_used": naming_series,
+            "items": [i.as_dict() for i in doc.items]  # show enriched items in response
         }
 
     except Exception as e:
@@ -1306,7 +1427,7 @@ def get_sales_details_with_patient_info():
 
     data = frappe.request.get_json()
     name = data.get("name") or data.get("id")
-    doctype = data.get("doctype", "Sales Order")  # Default to Sales Order
+    doctype = data.get("doctype", "Sales Order")
 
     if not name:
         frappe.local.response["http_status_code"] = 400
@@ -1324,8 +1445,8 @@ def get_sales_details_with_patient_info():
 
     patient_info, inpatient_info, address_list = {}, {}, []
 
-    # Patient details
-    if doc.patient:
+    # Patient Info
+    if getattr(doc, "patient", None):
         try:
             patient = frappe.get_doc("Patient", doc.patient)
             patient_info = {
@@ -1342,12 +1463,12 @@ def get_sales_details_with_patient_info():
         except frappe.DoesNotExistError:
             patient_info = {"error": f"Patient {doc.patient} not found"}
 
-    # Inpatient Record
-    if doc.inpatient_record:
+    # Inpatient Info
+    if getattr(doc, "inpatient_record", None):
         try:
             inpatient = frappe.get_doc("Inpatient Record", doc.inpatient_record)
             inpatient_info = {
-                "name":doc.inpatient_record,
+                "name": doc.inpatient_record,
                 "scheduled_date": inpatient.scheduled_date,
                 "service_unit__ward": inpatient.service_unit__ward,
                 "primary_practitioner": inpatient.primary_practitioner,
@@ -1372,7 +1493,7 @@ def get_sales_details_with_patient_info():
         except frappe.DoesNotExistError:
             inpatient_info = {"error": f"Inpatient Record {doc.inpatient_record} not found"}
 
-    # Sales/Invoice Items
+    # Items with GST Split
     items = []
     for item in doc.items:
         item_data = {
@@ -1381,45 +1502,82 @@ def get_sales_details_with_patient_info():
             "item_name": item.item_name,
             "qty": item.qty,
             "rate": item.rate,
+            "amount": item.amount,
             "reference_dn": item.reference_dn,
             "reference_dt": item.reference_dt,
             "creation": item.creation,
         }
 
-        # Correct delivery field per Doctype
+        # Delivery field
         if doctype == "Sales Order":
             item_data["delivery_date"] = item.delivery_date
         elif doctype == "Sales Invoice":
-            item_data["delivered_date"] = item.delivered_date
+            item_data["delivered_date"] = getattr(item, "delivered_date", None)
 
-        # Handle Patient Encounter
+        # Practitioner from Encounter
         if item.reference_dt == "Patient Encounter" and item.reference_dn:
             try:
                 encounter = frappe.get_doc("Patient Encounter", item.reference_dn)
                 practitioner = frappe.get_doc("Healthcare Practitioner", encounter.practitioner)
-
                 practitioner_name = encounter.practitioner_name or ""
                 item_data["item_name"] = f"{practitioner.inpatient_visit_charge_item} ({practitioner_name})"
             except frappe.DoesNotExistError:
                 item_data["item_name"] = "(Unknown Practitioner)"
 
-        # op_consulting_charge_item  inpatient_visit_charge op_consulting_charge
-
-                # Handle Patient Appointment
+        # Practitioner from Appointment
         if item.reference_dt == "Patient Appointment" and item.reference_dn:
             try:
                 encounter = frappe.get_doc("Patient Appointment", item.reference_dn)
-                practitioner = frappe.get_doc("Healthcare Practitioner", encounter.practitioner)    
-
+                practitioner = frappe.get_doc("Healthcare Practitioner", encounter.practitioner)
                 practitioner_name = encounter.practitioner_name or ""
                 item_data["item_name"] = f"{practitioner.op_consulting_charge_item} ({practitioner_name})"
             except frappe.DoesNotExistError:
                 item_data["item_name"] = "Inpatient Visit Charge (Unknown Practitioner)"
 
+        # --- GST Split (from item_tax_rate or item_tax_template) ---
+        cgst_rate, sgst_rate, igst_rate = 0, 0, 0
+        cgst_amt, sgst_amt, igst_amt = 0, 0, 0
+
+        # case 1: item_tax_rate dict (JSON stored in DB)
+        # if item.item_tax_rate:
+        #     for tax_name, tax_rate in item.item_tax_rate.items():
+        #         if "CGST" in tax_name:
+        #             cgst_rate = tax_rate
+        #             cgst_amt = round(item.amount * tax_rate / 100, 2)
+        #         elif "SGST" in tax_name:
+        #             sgst_rate = tax_rate
+        #             sgst_amt = round(item.amount * tax_rate / 100, 2)
+        #         elif "IGST" in tax_name:
+        #             igst_rate = tax_rate
+        #             igst_amt = round(item.amount * tax_rate / 100, 2)
+
+        # case 2: item_tax_template (if item_tax_rate is empty)
+        if item.item_tax_template:
+            try:
+                template = frappe.get_doc("Item Tax Template", item.item_tax_template)
+                for t in template.taxes:
+                    tax_type = (t.tax_type or "").upper()  # normalize case
+                    if "CGST" in tax_type:
+                        cgst_rate = t.tax_rate
+                        cgst_amt = round(item.amount * t.tax_rate / 100, 2)
+                    elif "SGST" in tax_type:
+                        sgst_rate = t.tax_rate
+                        sgst_amt = round(item.amount * t.tax_rate / 100, 2)
+                    elif "IGST" in tax_type:
+                        igst_rate = t.tax_rate
+                        igst_amt = round(item.amount * t.tax_rate / 100, 2)
+            except frappe.DoesNotExistError:
+                pass
+
+        item_data.update({
+            "cgst_rate": cgst_rate, "cgst_amount": cgst_amt,
+            "sgst_rate": sgst_rate, "sgst_amount": sgst_amt,
+            "igst_rate": igst_rate, "igst_amount": igst_amt,
+        })
+
         items.append(item_data)
 
-
-    # Taxes (child table)
+    # Taxes
     taxes = []
     for tax in doc.taxes:
         taxes.append({
@@ -1432,7 +1590,7 @@ def get_sales_details_with_patient_info():
             "tax_amount_after_discount_amount": tax.tax_amount_after_discount_amount,
         })
 
-    # Totals and common financials
+    # Totals
     financial_info = {
         "total_qty": doc.total_qty,
         "total": doc.total,
@@ -1449,14 +1607,12 @@ def get_sales_details_with_patient_info():
         "discount_amount": doc.discount_amount,
     }
 
-    # Additional per-doctype fields
     if doctype == "Sales Order":
         financial_info["advance_paid"] = doc.advance_paid
     elif doctype == "Sales Invoice":
         financial_info["total_advance"] = doc.total_advance
         financial_info["outstanding_amount"] = doc.outstanding_amount
-        financial_info["paid_date"] = doc.paid_date
-
+        financial_info["paid_date"] = getattr(doc, "paid_date", None)
 
     return {
         "message": {
@@ -1466,6 +1622,6 @@ def get_sales_details_with_patient_info():
             "inpatient_record": inpatient_info,
             "address": address_list,
             "items": items,
-            "financials": financial_info
+            "financials": financial_info,
         }
     }

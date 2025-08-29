@@ -1,5 +1,6 @@
 import base64
 import frappe
+import json
 
 # Authentication helper
 def authenticate_user():
@@ -55,7 +56,8 @@ def listItems():
                 "standard_rate",
                 "valuation_rate AS default_valuation_rate",
                 "safety_stock",
-                "disabled AS status"
+                "disabled AS status",
+				"parent_item_group"
             ],
             order_by="creation desc",
         )
@@ -783,3 +785,278 @@ def getStockEntryDetails():
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Get Stock Entry Details API")
 		return {"error": str(e)}
+	
+
+
+
+# ------------------ CREATE MANUFACTURER ------------------
+@frappe.whitelist(allow_guest=False)
+def create_manufacturer():
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Method Not Allowed"}
+
+    if not authenticate_user():
+        return {"message": "Unauthorized", "success": False}
+
+    data = json.loads(frappe.request.data or "{}")
+
+    doc = frappe.new_doc("Manufacturer")
+    for field in [
+        "short_name", "full_name", "website", "country", "logo",
+        "address_contacts", "address_html",  
+        "contact_html",   "notes"
+    ]:
+        doc.set(field, data.get(field))
+
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {"message": "Manufacturer created", "name": doc.name, "success": True}
+
+
+# ------------------ GET ALL MANUFACTURERS ------------------
+@frappe.whitelist(allow_guest=False)
+def get_all_manufacturers():
+    if frappe.request.method != "GET":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Method Not Allowed"}
+
+    if not authenticate_user():
+        return {"message": "Unauthorized", "success": False}
+
+    manufacturers = frappe.get_all(
+        "Manufacturer",
+        fields=[
+            "name", "short_name", "full_name", "website", "country",
+            "logo", "address_contacts", "address_html",  
+            "contact_html",   "notes"
+        ],
+        order_by="modified desc"
+    )
+    return {"success": True, "data": manufacturers}
+
+
+# ------------------ GET MANUFACTURER BY ID ------------------
+@frappe.whitelist(allow_guest=False)
+def get_manufacturer(manufacturer_id):
+    if frappe.request.method != "GET":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Method Not Allowed"}
+
+    if not authenticate_user():
+        return {"message": "Unauthorized", "success": False}
+
+    doc = frappe.get_doc("Manufacturer", manufacturer_id)
+    return {
+        "success": True,
+        "data": {
+            "name": doc.name,
+            "short_name": doc.short_name,
+            "full_name": doc.full_name,
+            "website": doc.website,
+            "country": doc.country,
+            "logo": doc.logo,
+            "address_contacts": doc.address_contacts,
+            "address_html": doc.address_html,
+            "column_break_8": doc.column_break_8,
+            "contact_html": doc.contact_html,
+            "section_break_10": doc.section_break_10,
+            "notes": doc.notes
+        }
+    }
+
+
+# ------------------ UPDATE MANUFACTURER ------------------
+@frappe.whitelist(allow_guest=False)
+def update_manufacturer(manufacturer_id):
+    if frappe.request.method != "PUT":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Method Not Allowed"}
+
+    if not authenticate_user():
+        return {"message": "Unauthorized", "success": False}
+
+    data = json.loads(frappe.request.data or "{}")
+
+    doc = frappe.get_doc("Manufacturer", manufacturer_id)
+    for field in [
+        "short_name", "full_name", "website", "country", "logo",
+        "address_contacts", "address_html",  
+        "contact_html",   "notes"
+    ]:
+        if field in data:
+            doc.set(field, data.get(field))
+
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {"message": "Manufacturer updated", "name": doc.name, "success": True}
+
+
+
+# ------------------ CREATE BRAND ------------------
+@frappe.whitelist(allow_guest=False)
+def create_brand():
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Method Not Allowed"}
+
+    if not authenticate_user():
+        return {"message": "Unauthorized", "success": False}
+
+    data = json.loads(frappe.request.data or "{}")
+
+    doc = frappe.new_doc("Brand")
+    doc.brand = data.get("brand")
+
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {"message": "Brand created", "name": doc.name, "success": True}
+
+
+# ------------------ GET ALL BRANDS ------------------
+@frappe.whitelist(allow_guest=False)
+def get_all_brands():
+    if frappe.request.method != "GET":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Method Not Allowed"}
+
+    if not authenticate_user():
+        return {"message": "Unauthorized", "success": False}
+
+    brands = frappe.get_all(
+        "Brand",
+        fields=["name", "brand"],
+        order_by="modified desc"
+    )
+    return {"success": True, "data": brands}
+
+
+# ------------------ GET BRAND BY ID ------------------
+@frappe.whitelist(allow_guest=False)
+def get_brand(brand_id):
+    if frappe.request.method != "GET":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Method Not Allowed"}
+
+    if not authenticate_user():
+        return {"message": "Unauthorized", "success": False}
+
+    doc = frappe.get_doc("Brand", brand_id)
+    return {
+        "success": True,
+        "data": {
+            "name": doc.name,
+            "brand": doc.brand
+        }
+    }
+
+
+# ------------------ UPDATE BRAND ------------------
+@frappe.whitelist(allow_guest=False)
+def update_brand(brand_id):
+    if frappe.request.method != "PUT":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Method Not Allowed"}
+
+    if not authenticate_user():
+        return {"message": "Unauthorized", "success": False}
+
+    data = json.loads(frappe.request.data or "{}")
+
+    doc = frappe.get_doc("Brand", brand_id)
+    if "brand" in data:
+        doc.brand = data.get("brand")
+
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {"message": "Brand updated", "name": doc.name, "success": True}
+
+
+
+# ------------------ CREATE UOM ------------------
+@frappe.whitelist(allow_guest=False)
+def create_uom():
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Method Not Allowed"}
+
+    if not authenticate_user():
+        return {"message": "Unauthorized", "success": False}
+
+    data = json.loads(frappe.request.data or "{}")
+
+    doc = frappe.new_doc("UOM")
+    doc.uom_name = data.get("uom_name")
+    doc.enabled = data.get("enabled", 1)
+
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {"message": "UOM created", "name": doc.name, "success": True}
+
+
+# ------------------ GET ALL UOMs ------------------
+@frappe.whitelist(allow_guest=False)
+def get_all_uoms():
+    if frappe.request.method != "GET":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Method Not Allowed"}
+
+    if not authenticate_user():
+        return {"message": "Unauthorized", "success": False}
+
+    uoms = frappe.get_all(
+        "UOM",
+        fields=["name", "uom_name", "enabled"],
+        order_by="modified desc"
+    )
+    return {"success": True, "data": uoms}
+
+
+# ------------------ GET UOM BY ID ------------------
+@frappe.whitelist(allow_guest=False)
+def get_uom(uom_id):
+    if frappe.request.method != "GET":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Method Not Allowed"}
+
+    if not authenticate_user():
+        return {"message": "Unauthorized", "success": False}
+
+    doc = frappe.get_doc("UOM", uom_id)
+    return {
+        "success": True,
+        "data": {
+            "name": doc.name,
+            "uom_name": doc.uom_name,
+            "enabled": doc.enabled
+        }
+    }
+
+
+# ------------------ UPDATE UOM ------------------
+@frappe.whitelist(allow_guest=False)
+def update_uom(uom_id):
+    if frappe.request.method != "PUT":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Method Not Allowed"}
+
+    if not authenticate_user():
+        return {"message": "Unauthorized", "success": False}
+
+    data = json.loads(frappe.request.data or "{}")
+
+    doc = frappe.get_doc("UOM", uom_id)
+    if "uom_name" in data:
+        doc.uom_name = data.get("uom_name")
+    if "enabled" in data:
+        doc.enabled = data.get("enabled")
+
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {"message": "UOM updated", "name": doc.name, "success": True}

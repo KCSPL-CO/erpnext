@@ -1376,3 +1376,58 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 };
 
 extend_cscript(cur_frm.cscript, new erpnext.selling.SalesOrderController({ frm: cur_frm }));
+
+
+
+frappe.ui.form.on('Sales Order Item', {
+    item_code: function(frm, cdt, cdn) {
+        let row = locals[cdt][cdn];
+
+        if (row.item_code) {
+            frappe.call({
+                method: "frappe.client.get",
+                args: {
+                    doctype: "Item",
+                    name: row.item_code
+                },
+                callback: function(r) {
+                    if (r.message && r.message.taxes && r.message.taxes.length > 0) {
+                        // take the first Item Tax Template from Item -> Taxes table
+                        let first_tax = r.message.taxes[0].item_tax_template;
+
+                        if (first_tax) {
+                            frappe.model.set_value(cdt, cdn, "item_tax_template", first_tax);
+                        }
+                    }
+                }
+            });
+        }
+    }
+});
+
+frappe.ui.form.on('Sales Order', {
+    onload_post_render: function(frm) {
+        // Wait until grid is rendered, then remove query
+        frm.fields_dict["items"].grid.get_field("item_tax_template").get_query = function() {
+            return {
+                query: null,   // remove backend query
+                filters: {}    // no filters
+            };
+        };
+    }
+});
+
+frappe.ui.form.on('Sales Order Item', {
+    form_render: function(frm, cdt, cdn) {
+        // Also reapply on row render
+        frm.fields_dict["items"].grid.get_field("item_tax_template").get_query = function() {
+            return {
+                query: null,   // stop using erpnext query
+                filters: {}
+            };
+        };
+    }
+});
+
+
+

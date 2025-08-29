@@ -65,6 +65,7 @@ class Item(Document):
 		from erpnext.stock.doctype.item_reorder.item_reorder import ItemReorder
 		from erpnext.stock.doctype.item_supplier.item_supplier import ItemSupplier
 		from erpnext.stock.doctype.item_tax.item_tax import ItemTax
+		from erpnext.stock.doctype.item_tax_details.item_tax_details import ItemTaxDetails
 		from erpnext.stock.doctype.item_variant_attribute.item_variant_attribute import ItemVariantAttribute
 		from erpnext.stock.doctype.uom_conversion_detail.uom_conversion_detail import UOMConversionDetail
 		from frappe.types import DF
@@ -116,6 +117,7 @@ class Item(Document):
 		item_defaults: DF.Table[ItemDefault]
 		item_group: DF.Link
 		item_name: DF.Data | None
+		item_tax_template: DF.Link | None
 		last_purchase_rate: DF.Float
 		lead_time_days: DF.Int
 		max_discount: DF.Float
@@ -139,6 +141,7 @@ class Item(Document):
 		standard_rate: DF.Currency
 		stock_uom: DF.Link
 		supplier_items: DF.Table[ItemSupplier]
+		tax_details: DF.Table[ItemTaxDetails]
 		taxes: DF.Table[ItemTax]
 		total_projected_qty: DF.Float
 		uoms: DF.Table[UOMConversionDetail]
