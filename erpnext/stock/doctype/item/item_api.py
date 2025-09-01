@@ -804,8 +804,7 @@ def create_manufacturer():
     doc = frappe.new_doc("Manufacturer")
     for field in [
         "short_name", "full_name", "website", "country", "logo",
-        "address_contacts", "address_html",  
-        "contact_html",   "notes"
+         "notes"
     ]:
         doc.set(field, data.get(field))
 
@@ -829,8 +828,7 @@ def get_all_manufacturers():
         "Manufacturer",
         fields=[
             "name", "short_name", "full_name", "website", "country",
-            "logo", "address_contacts", "address_html",  
-            "contact_html",   "notes"
+            "logo","notes"
         ],
         order_by="modified desc"
     )
@@ -857,11 +855,7 @@ def get_manufacturer(manufacturer_id):
             "website": doc.website,
             "country": doc.country,
             "logo": doc.logo,
-            "address_contacts": doc.address_contacts,
-            "address_html": doc.address_html,
-            "column_break_8": doc.column_break_8,
-            "contact_html": doc.contact_html,
-            "section_break_10": doc.section_break_10,
+            
             "notes": doc.notes
         }
     }
@@ -882,8 +876,7 @@ def update_manufacturer(manufacturer_id):
     doc = frappe.get_doc("Manufacturer", manufacturer_id)
     for field in [
         "short_name", "full_name", "website", "country", "logo",
-        "address_contacts", "address_html",  
-        "contact_html",   "notes"
+         "notes"
     ]:
         if field in data:
             doc.set(field, data.get(field))
