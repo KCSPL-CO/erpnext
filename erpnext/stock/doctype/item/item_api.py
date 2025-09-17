@@ -984,6 +984,7 @@ def create_uom():
 
     doc = frappe.new_doc("UOM")
     doc.uom_name = data.get("uom_name")
+    doc.must_be_whole_number = data.get("must_be_whole_number")
     doc.enabled = data.get("enabled", 1)
 
     doc.insert(ignore_permissions=True)
@@ -1024,9 +1025,7 @@ def get_uom(uom_id):
     return {
         "success": True,
         "data": {
-            "name": doc.name,
-            "uom_name": doc.uom_name,
-            "enabled": doc.enabled
+            "message":doc
         }
     }
 

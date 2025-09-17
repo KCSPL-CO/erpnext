@@ -80,27 +80,3 @@ def get_items_by_warehouse():
         "data": stock_data
     }
  
-@frappe.whitelist(allow_guest=True)
-def listWarehouse():
-    if frappe.request.method != "GET":
-        frappe.local.response["http_status_code"] = 405
-        return {"error": "Only GET method allowed"}
-
-    if not authenticate_user():
-        return {"error": "Unauthorized"}
-
-    try:
-        warehouse = frappe.get_all(
-            "Warehouse",
-            fields=["*"],
-            order_by="creation desc",
-        )
-        return {
-            "message": warehouse,
-           
-        }
-
-    except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "List Warehouse")
-        frappe.local.response["http_status_code"] = 500
-        return {"error": str(e)}
