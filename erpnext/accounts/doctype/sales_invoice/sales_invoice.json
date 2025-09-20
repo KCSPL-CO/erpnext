@@ -254,7 +254,7 @@
    "no_copy": 1,
    "oldfieldname": "naming_series",
    "oldfieldtype": "Select",
-   "options": "ACC-SINV-.YYYY.-\nACC-SINV-RET-.YYYY.-\nDRUG-SINV-YYYY-\nLAB-SINV-YYYY-\nSERV-SINV-YYYY-\nCONS-SINV-YYYY-\nRAW-SINV-YYYY-\nPROD-SINV-YYYY-\nSUB-SINV-YYYY-\nDEMO-SINV-YYYY-",
+   "options": "ACC-SINV-.YYYY.-\nACC-SINV-RET-.YYYY.-\nDRUG-SINV-YYYY-\nLAB-SINV-YYYY-\nSERV-SINV-YYYY-\nCONS-SINV-YYYY-\nRAW-SINV-YYYY-\nPROD-SINV-YYYY-\nSUB-SINV-YYYY-\nDEMO-SINV-YYYY-\nIP-SINV-YYYY-",
    "print_hide": 1,
    "reqd": 1,
    "set_only_once": 1
@@ -2246,7 +2246,7 @@
    "link_fieldname": "consolidated_invoice"
   }
  ],
- "modified": "2025-08-19 15:33:02.339083",
+ "modified": "2025-09-19 13:31:35.042506",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice",

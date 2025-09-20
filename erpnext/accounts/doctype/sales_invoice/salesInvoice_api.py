@@ -131,56 +131,6 @@ def createSalesInvoice():
         ]
         item_groups = []
 
-# Enrich items with default item_tax_template from Item master
-        # enriched_items = []
-        # for item in data.get("items", []):
-        #     cgst_rate = sgst_rate = igst_rate = 0
-        #     cgst_amt = sgst_amt = igst_amt = 0
-
-        #     item_code = item.get("item_code")
-        #     # choose a numeric base for taxes
-        #     base_amount = item.get("amount")
-        #     if base_amount is None:
-        #         base_amount = (item.get("rate", 0) or 0) * (item.get("qty", 0) or 0)
-
-        #     if item_code:
-        #         # fetch first item_tax_template linked on Item (Item Tax child table)
-        #         item_tax_template = frappe.db.get_value(
-        #             "Item Tax",
-        #             {"parent": item_code},
-        #             "item_tax_template"
-        #         )
-
-        #         if item_tax_template:
-        #             item["item_tax_template"] = item_tax_template
-        #             try:
-        #                 template = frappe.get_doc("Item Tax Template", item_tax_template)
-        #                 for t in template.taxes:
-        #                     tax_type = (t.tax_type or "").upper()
-        #                     rate = float(t.tax_rate or 0)
-        #                     if "CGST" in tax_type:
-        #                         cgst_rate = rate
-        #                         cgst_amt = round(base_amount * rate / 100.0, 2)
-        #                     elif "SGST" in tax_type:
-        #                         sgst_rate = rate
-        #                         sgst_amt = round(base_amount * rate / 100.0, 2)
-        #                     elif "IGST" in tax_type:
-        #                         igst_rate = rate
-        #                         igst_amt = round(base_amount * rate / 100.0, 2)
-        #             except frappe.DoesNotExistError:
-        #                 pass
-
-        #     item["cgst_rate"] = cgst_rate
-        #     item["cgst_amount"] = cgst_amt
-        #     item["sgst_rate"] = sgst_rate
-        #     item["sgst_amount"] = sgst_amt
-        #     item["igst_rate"] = igst_rate
-        #     item["igst_amount"] = igst_amt
-
-        #     enriched_items.append(item)
-
-        # data["items"] = enriched_items
-        # Enrich items with default item_tax_template from Item master
         enriched_items = []
 
         for item in data.get("items", []):
@@ -245,33 +195,38 @@ def createSalesInvoice():
         data["items"] = enriched_items
 
 
-        unique_groups = set(item_groups)
+        # ✅ Naming Series
         year = frappe.utils.now_datetime().year
-
-        # Define mapping from item_group to naming series
-        series_map = {
-            "Drug": f"DRUG-SINV-{year}-",
-            "Laboratory": f"LAB-SINV-{year}-",
-            "Services": f"SERV-SINV-{year}-",
-            "Consumable": f"CONS-SINV-{year}-",
-            "Raw Material": f"RAW-SINV-{year}-",
-            "Products": f"PROD-SINV-{year}-",
-            "Sub Assemblies": f"SUB-SINV-{year}-",
-            "Demo Item Group": f"DEMO-SINV-{year}-",
-        }
-
-        # Determine final series
-        if len(unique_groups) == 1:
-            group = list(unique_groups)[0]
-            naming_series = series_map.get(group, f"ACC-SINV-.YYYY.-")
+        if data.get("is_ip_bill"):
+            naming_series = f"IP-SINV-{year}-"
         else:
-            naming_series = f"ACC-SINV-.YYYY.-"  # fallback for multiple/missing groups
+            unique_groups = set(item_groups)
+            series_map = {
+                "Drug": f"DRUG-SINV-{year}-",
+                "Laboratory": f"LAB-SINV-{year}-",
+                "Services": f"SERV-SINV-{year}-",
+                "Consumable": f"CONS-SINV-{year}-",
+                "Raw Material": f"RAW-SINV-{year}-",
+                "Products": f"PROD-SINV-{year}-",
+                "Sub Assemblies": f"SUB-SINV-{year}-",
+                "Demo Item Group": f"DEMO-SINV-{year}-",
+            }
+            if len(unique_groups) == 1:
+                naming_series = series_map.get(list(unique_groups)[0], f"ACC-SINV-.YYYY.-")
+            else:
+                naming_series = f"ACC-SINV-.YYYY.-"
 
         # Remove naming_series from incoming data if exists
         data.pop("naming_series", None)
-
+        company = frappe.defaults.get_user_default("Company")
+        currency = frappe.db.get_value("Company", company, "default_currency") or "INR"
         # Create Sales Invoice
         doc = frappe.new_doc("Sales Invoice")
+        doc.company = company
+        doc.currency = currency
+        doc.conversion_rate = 1
+        doc.plc_conversion_rate = 1
+
         doc.update(data)
 
         # 🔹 Add taxes from each item's item_tax_template into Sales Invoice Taxes
@@ -294,10 +249,30 @@ def createSalesInvoice():
             doc.taxes_and_charges = data["taxes_and_charges"]
 
         # This will trigger tax template fetch
+        if data.get("allocate_advances_automatically"):
+            doc.allocate_advances_automatically = 1
+            
         doc.set_missing_values()
 
+
+       
+        
+
         doc.insert(ignore_permissions=True)
+        
+
+        # Run validations so advance allocation reflects in total_advance and outstanding_amount
+        doc.run_method("set_advances")
+        doc.run_method("set_missing_values")
+        doc.run_method("calculate_totals")
+
+        # Force recalculation of outstanding
+        doc.outstanding_amount = doc.grand_total - doc.total_advance
+
+        doc.save(ignore_permissions=True)
         frappe.db.commit()
+
+        
 
         return {
             "message": "Sales Invoice created successfully",
@@ -311,27 +286,258 @@ def createSalesInvoice():
         return {"error": str(e)}
 
 
+# @frappe.whitelist(allow_guest=True)
+# def create_sales_invoice():
+#     if frappe.request.method != "POST":
+#         frappe.local.response["http_status_code"] = 405
+#         return {"message": "Only POST allowed", "success": False}
+ 
+#     if not authenticate_user():
+#         return {"message": "Unauthorized", "success": False}
+ 
+#     try:
+#         data = frappe.request.get_json()
+ 
+#         # Default series
+#         naming_series = "ACC-SINV-.YYYY.-"
+ 
+#         # Determine series from first item's item_group
+#         first_item_code = data.get("items", [{}])[0].get("item")
+#         if first_item_code:
+#             item_group = frappe.db.get_value("Item", {"item_code": first_item_code}, "item_group")
+ 
+#             year = frappe.utils.now_datetime().year
+#             series_map = {
+#                 "Drug": f"DRUG-SINV-{year}-",
+#                 "Laboratory": f"LAB-SINV-{year}-",
+#                 "Services": f"SERV-SINV-{year}-",
+#                 "Consumable": f"CONS-SINV-{year}-",
+#                 "Raw Material": f"RAW-SINV-{year}-",
+#                 "Products": f"PROD-SINV-{year}-",
+#                 "Sub Assemblies": f"SUB-SINV-{year}-",
+#                 "Demo Item Group": f"DEMO-SINV-{year}-",
+#             }
+ 
+#             if item_group in series_map:
+#                 naming_series = series_map[item_group]
+ 
+#         doc = frappe.new_doc("Sales Invoice")
+#         doc.naming_series = naming_series
+#         doc.customer = data.get("customer")
+#         doc.customer_name = data.get("customer_name")
+#         doc.tax_id = data.get("tax_id")
+#         doc.company = data.get("company")
+#         doc.posting_date = data.get("posting_date")
+#         doc.posting_time = data.get("posting_time")
+#         doc.set_posting_time = data.get("set_posting_time", 0)
+#         doc.due_date = data.get("due_date")
+#         doc.patient = data.get("patient")
+#         doc.patient_name = data.get("patient_name")
+#         doc.ref_practitioner = data.get("ref_practitioner")
+ 
+#         doc.total_qty = data.get("total_qty", 0)
+#         doc.total = data.get("total", 0)
+#         doc.net_total = data.get("net_total", 0)
+#         doc.tax_category = data.get("tax_category")
+#         doc.taxes_and_charges = data.get("taxes_and_charges")
+#         doc.total_taxes_and_charges = data.get("total_taxes_and_charges", 0)
+#         doc.grand_total = data.get("grand_total", 0)
+#         doc.rounded_total = data.get("rounded_total", 0)
+#         doc.outstanding_amount = data.get("outstanding_amount", 0)
+ 
+#         doc.apply_discount_on = data.get("apply_discount_on", "")
+#         doc.additional_discount_percentage = data.get("additional_discount_percentage", 0)
+#         doc.discount_amount = data.get("discount_amount", 0)
+ 
+#         doc.is_pos = data.get("is_pos", False)
+#         doc.is_return = data.get("is_return", False)
+#         doc.is_debit_note = data.get("is_debit_note", False)
+#         doc.update_billed_amount_in_sales_order = data.get("update_billed_amount_in_sales_order", True)
+#         doc.update_billed_amount_in_delivery_note = data.get("update_billed_amount_in_delivery_note", True)
+#         doc.pos_profile = data.get("pos_profile", "")
+#         doc.reason_for_issuing_document = data.get("reason_for_issuing_document", "")
+#         doc.return_against = data.get("return_against", "")
+ 
+#         # Add items
+#         for item in data.get("items", []):
+#             doc.append("items", {
+#                 "item_name": item.get("item_name"),
+#                 "item_code": item.get("item_code"),
+#                 "qty": item.get("qty"),
+#                 "rate": item.get("rate"),
+#                 "amount": item.get("amount"),
+#                 "income_account": item.get("income_account"),
+#                 "uom": "Nos"
+#             })
+ 
+#         # Add taxes/charges
+#         for charge in data.get("charges", []):
+#             doc.append("taxes", {
+#                 "charge_type": charge.get("type"),
+#                 "account_head": charge.get("account_head"),
+#                 "rate": charge.get("tax_rate"),
+#                 "tax_amount": charge.get("amount"),
+#                 "total": charge.get("total")
+#             })
+ 
+#         doc.insert(ignore_permissions=True)
+#         # doc.submit()  # Uncomment if you want auto-submission
+#         frappe.db.commit()
+ 
+#         return {
+#             "message": "Sales Invoice created",
+#             "success": True,
+#             "data": doc.as_dict()
+#         }
+ 
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), "Create Sales Invoice")
+#         return {"message": str(e), "success": False}
+
+
+import frappe
+from frappe import _
+from frappe.utils import now_datetime
+
+
 @frappe.whitelist(allow_guest=True)
 def create_sales_invoice():
     if frappe.request.method != "POST":
         frappe.local.response["http_status_code"] = 405
-        return {"message": "Only POST allowed", "success": False}
- 
-    if not authenticate_user():
-        return {"message": "Unauthorized", "success": False}
- 
+        return {"error": "Only POST method allowed"}
+
     try:
         data = frappe.request.get_json()
- 
-        # Default series
-        naming_series = "ACC-SINV-.YYYY.-"
- 
-        # Determine series from first item's item_group
-        first_item_code = data.get("items", [{}])[0].get("item")
-        if first_item_code:
-            item_group = frappe.db.get_value("Item", {"item_code": first_item_code}, "item_group")
- 
-            year = frappe.utils.now_datetime().year
+
+        # ✅ Basic mandatory checks
+        customer = data.get("customer")
+        patient = data.get("patient")
+        due_date = data.get("due_date")
+
+        if not customer or not patient or not due_date:
+            return {"error": "customer, patient and due_date are mandatory"}
+
+        # ✅ Fetch Patient, Company, Currency
+        patient_doc = frappe.get_doc("Patient", patient)
+        company = data.get("company") or frappe.defaults.get_user_default("Company")
+        company_abbr = frappe.db.get_value("Company", company, "abbr")
+        currency = frappe.db.get_value("Company", company, "default_currency") or "INR"
+
+        # ✅ Prepare Sales Invoice
+        doc = frappe.new_doc("Sales Invoice")
+        doc.customer = customer
+        doc.customer_name = data.get("customer_name") or customer
+        doc.patient = patient
+        doc.patient_name = data.get("patient_name") or patient_doc.patient_name
+        doc.due_date = due_date
+        doc.company = company
+        doc.currency = currency
+        doc.is_pos = data.get("is_pos", 0)
+        doc.is_return = data.get("is_return", 0)
+        doc.is_debit_note = data.get("is_debit_note", 0)
+        doc.is_ip_bill = data.get("is_ip_bill", 0)
+        doc.apply_discount_on = data.get("apply_discount_on", "Grand Total")
+        doc.selling_price_list = data.get("selling_price_list", "Standard Selling")
+        doc.additional_discount_percentage = data.get("additional_discount_percentage", 0)
+        doc.discount_amount = data.get("discount_amount", 0)
+        doc.conversion_rate = 1
+        doc.plc_conversion_rate = 1
+
+        # ✅ Items enrichment
+        enriched_items = []
+        item_groups = []
+
+        for row in data.get("items", []):
+            item_code = row.get("item_code")
+            qty = float(row.get("qty") or 0)
+            rate = float(row.get("rate") or 0)
+
+            if not item_code:
+                continue
+
+            item_doc = frappe.get_doc("Item", item_code)
+            if item_doc.item_group:
+                item_groups.append(item_doc.item_group)
+
+            # --- Tax Template Calculation ---
+            cgst_rate = sgst_rate = igst_rate = 0.0
+            cgst_amt = sgst_amt = igst_amt = 0.0
+            base_amount = round(qty * rate, 2)
+            total_amount = base_amount
+            item_tax_template = None
+
+            # Fetch tax template
+            tax_template = frappe.db.get_value("Item Tax", {"parent": item_code}, "item_tax_template")
+            if tax_template:
+                item_tax_template = tax_template
+                try:
+                    template = frappe.get_doc("Item Tax Template", tax_template)
+                    for t in template.taxes:
+                        tax_type = (t.tax_type or "").upper()
+                        rate_pct = float(t.tax_rate or 0)
+
+                        if "CGST" in tax_type:
+                            cgst_rate = rate_pct
+                            cgst_amt = round(base_amount * rate_pct / 100.0, 2)
+                        elif "SGST" in tax_type:
+                            sgst_rate = rate_pct
+                            sgst_amt = round(base_amount * rate_pct / 100.0, 2)
+                        elif "IGST" in tax_type:
+                            igst_rate = rate_pct
+                            igst_amt = round(base_amount * rate_pct / 100.0, 2)
+
+                    total_amount = round(base_amount + cgst_amt + sgst_amt + igst_amt, 2)
+
+                except frappe.DoesNotExistError:
+                    pass
+
+            enriched_item = {
+                "item_code": item_doc.item_code,
+                "item_name": item_doc.item_name,
+                "description": item_doc.description or item_doc.item_name,
+                "qty": qty,
+                "uom": item_doc.stock_uom,
+                "stock_uom": item_doc.stock_uom,
+                "conversion_factor": 1,
+                "rate": rate or item_doc.standard_rate or 0,
+                "income_account": item_doc.income_account or f"Sales - {company_abbr}",
+                "expense_account": item_doc.expense_account or f"Cost of Goods Sold - {company_abbr}",
+                "cost_center": item_doc.get("cost_center") or f"Main - {company_abbr}",
+                "warehouse": item_doc.default_warehouse or f"Stores - {company_abbr}",
+                "reference_dt": row.get("reference_dt") or "",
+                "reference_dn": row.get("reference_dn") or "",
+                "sales_order": row.get("sales_order") or "",
+                "so_detail": row.get("so_detail") or "",
+                "base_amount": base_amount,
+                "total_amount": total_amount,
+                "cgst_rate": cgst_rate,
+                "cgst_amount": cgst_amt,
+                "sgst_rate": sgst_rate,
+                "sgst_amount": sgst_amt,
+                "igst_rate": igst_rate,
+                "igst_amount": igst_amt,
+                "item_tax_template": item_tax_template
+            }
+
+            doc.append("items", enriched_item)
+
+            # 🔹 Also append taxes to parent if template exists
+            if item_tax_template:
+                template = frappe.get_doc("Item Tax Template", item_tax_template)
+                for tax in template.taxes:
+                    doc.append("taxes", {
+                        "charge_type": "On Net Total",
+                        "account_head": tax.tax_type,
+                        "rate": tax.tax_rate,
+                        "description": item_doc.item_name
+                    })
+
+        # ✅ Naming Series
+        year = now_datetime().year
+        if doc.is_ip_bill:
+            doc.naming_series = f"IP-SINV-{year}-"
+        else:
+            unique_groups = set(item_groups)
             series_map = {
                 "Drug": f"DRUG-SINV-{year}-",
                 "Laboratory": f"LAB-SINV-{year}-",
@@ -342,82 +548,28 @@ def create_sales_invoice():
                 "Sub Assemblies": f"SUB-SINV-{year}-",
                 "Demo Item Group": f"DEMO-SINV-{year}-",
             }
- 
-            if item_group in series_map:
-                naming_series = series_map[item_group]
- 
-        doc = frappe.new_doc("Sales Invoice")
-        doc.naming_series = naming_series
-        doc.customer = data.get("customer")
-        doc.customer_name = data.get("customer_name")
-        doc.tax_id = data.get("tax_id")
-        doc.company = data.get("company")
-        doc.posting_date = data.get("posting_date")
-        doc.posting_time = data.get("posting_time")
-        doc.set_posting_time = data.get("set_posting_time", 0)
-        doc.due_date = data.get("due_date")
-        doc.patient = data.get("patient")
-        doc.patient_name = data.get("patient_name")
-        doc.ref_practitioner = data.get("ref_practitioner")
- 
-        doc.total_qty = data.get("total_qty", 0)
-        doc.total = data.get("total", 0)
-        doc.net_total = data.get("net_total", 0)
-        doc.tax_category = data.get("tax_category")
-        doc.taxes_and_charges = data.get("taxes_and_charges")
-        doc.total_taxes_and_charges = data.get("total_taxes_and_charges", 0)
-        doc.grand_total = data.get("grand_total", 0)
-        doc.rounded_total = data.get("rounded_total", 0)
-        doc.outstanding_amount = data.get("outstanding_amount", 0)
- 
-        doc.apply_discount_on = data.get("apply_discount_on", "")
-        doc.additional_discount_percentage = data.get("additional_discount_percentage", 0)
-        doc.discount_amount = data.get("discount_amount", 0)
- 
-        doc.is_pos = data.get("is_pos", False)
-        doc.is_return = data.get("is_return", False)
-        doc.is_debit_note = data.get("is_debit_note", False)
-        doc.update_billed_amount_in_sales_order = data.get("update_billed_amount_in_sales_order", True)
-        doc.update_billed_amount_in_delivery_note = data.get("update_billed_amount_in_delivery_note", True)
-        doc.pos_profile = data.get("pos_profile", "")
-        doc.reason_for_issuing_document = data.get("reason_for_issuing_document", "")
-        doc.return_against = data.get("return_against", "")
- 
-        # Add items
-        for item in data.get("items", []):
-            doc.append("items", {
-                "item_name": item.get("item_name"),
-                "item_code": item.get("item_code"),
-                "qty": item.get("qty"),
-                "rate": item.get("rate"),
-                "amount": item.get("amount"),
-                "income_account": item.get("income_account"),
-                "uom": "Nos"
-            })
- 
-        # Add taxes/charges
-        for charge in data.get("charges", []):
-            doc.append("taxes", {
-                "charge_type": charge.get("type"),
-                "account_head": charge.get("account_head"),
-                "rate": charge.get("tax_rate"),
-                "tax_amount": charge.get("amount"),
-                "total": charge.get("total")
-            })
- 
+            if len(unique_groups) == 1:
+                doc.naming_series = series_map.get(list(unique_groups)[0], f"ACC-SINV-.YYYY.-")
+            else:
+                doc.naming_series = f"ACC-SINV-.YYYY.-"
+
+        # ✅ Fill defaults & Save
+        doc.set_missing_values()
         doc.insert(ignore_permissions=True)
-        # doc.submit()  # Uncomment if you want auto-submission
         frappe.db.commit()
- 
+
         return {
-            "message": "Sales Invoice created",
-            "success": True,
-            "data": doc.as_dict()
+            "message": "Sales Invoice created successfully",
+            "name": doc.name,
+            "series_used": doc.naming_series,
+            "items": [i.as_dict() for i in doc.items],
+            "taxes": [t.as_dict() for t in doc.taxes]
         }
- 
+
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Create Sales Invoice")
-        return {"message": str(e), "success": False}
+        frappe.log_error(frappe.get_traceback(), "Create Sales Invoice API")
+        return {"error": str(e)}
+
 
 # 3. Update Sales Invoice
 @frappe.whitelist(allow_guest=True)
