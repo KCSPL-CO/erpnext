@@ -580,25 +580,6 @@ def listStockEntries():
         return {"error": str(e)}
 
 
-@frappe.whitelist(allow_guest=True)
-def createStockEntry():
-	if frappe.request.method != "POST":
-		frappe.local.response["http_status_code"] = 405
-		return {"error": "Only POST method allowed"}
-	if not authenticate_user():
-		return {"error": "Unauthorized"}
-
-	data = frappe.request.get_json()
-	try:
-		doc = frappe.new_doc("Stock Entry")
-		doc.update(data)
-		doc.insert(ignore_permissions=True)
-		frappe.db.commit()
-		return {"message": "Stock Entry created successfully", "name": doc.name}
-	except Exception as e:
-		frappe.log_error(frappe.get_traceback(), "Create Stock Entry API")
-		return {"error": str(e)}
-
 @frappe.whitelist(allow_guest=False)
 def create_stock_entry_from_material_request():
     user = authenticate_user()
@@ -693,6 +674,82 @@ def filterStockEntries():
 
 
 @frappe.whitelist(allow_guest=True)
+def createStockEntry():
+	if frappe.request.method != "POST":
+		frappe.local.response["http_status_code"] = 405
+		return {"error": "Only POST method allowed"}
+	if not authenticate_user():
+		return {"error": "Unauthorized"}
+
+	data = frappe.request.get_json()
+	try:
+		doc = frappe.new_doc("Stock Entry")
+		doc.update(data)
+		doc.insert(ignore_permissions=True)
+		frappe.db.commit()
+		return {"message": "Stock Entry created successfully", "name": doc.name}
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Create Stock Entry API")
+		return {"error": str(e)}
+
+@frappe.whitelist(allow_guest=True)
+def changeStockEntryStatus():
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+    
+    if not authenticate_user():
+        return {"error": "Unauthorized"}
+    
+    data = frappe.request.get_json()
+    stock_entry_id = data.get("name") or data.get("id")
+    action = data.get("action")  # expected: "submit" or "cancel"
+    
+    if not stock_entry_id:
+        return {"error": "Missing Stock Entry ID"}
+    if not action:
+        return {"error": "Missing action (submit / cancel)"}
+    
+    try:
+        doc = frappe.get_doc("Stock Entry", stock_entry_id)
+        
+        if action.lower() == "submit":
+            if doc.docstatus == 0:  # Draft
+                doc.submit()
+                frappe.db.commit()
+                return {"message": f"Stock Entry {doc.name} submitted successfully"}
+            else:
+                return {"error": f"Stock Entry {doc.name} is already submitted or cancelled"}
+        
+        elif action.lower() == "cancel":
+            if doc.docstatus == 1:  # Submitted
+                doc.cancel()
+                frappe.db.commit()
+                return {"message": f"Stock Entry {doc.name} cancelled successfully"}
+            else:
+                return {"error": f"Stock Entry {doc.name} is not in submitted state"}
+        
+        else:
+            return {"error": "Invalid action. Use 'submit' or 'cancel'"}
+    
+    except frappe.DoesNotExistError:
+        frappe.local.response["http_status_code"] = 404
+        return {"error": "Stock Entry not found"}
+    
+    except frappe.ValidationError as ve:
+        frappe.local.response["http_status_code"] = 400
+        frappe.db.rollback()
+        return {"error": f"Validation Error: {str(ve)}"}
+    
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Change Stock Entry Status API")
+        frappe.local.response["http_status_code"] = 500
+        frappe.db.rollback()
+        return {"error": str(e)}
+
+
+
+@frappe.whitelist(allow_guest=True)
 def updateStockEntry():
     if frappe.request.method != "POST":
         frappe.local.response["http_status_code"] = 405
@@ -740,30 +797,6 @@ def updateStockEntry():
  
 
 @frappe.whitelist(allow_guest=True)
-def deleteStockEntry():
-	if frappe.request.method != "POST":
-		frappe.local.response["http_status_code"] = 405
-		return {"error": "Only POST method allowed"}
-	if not authenticate_user():
-		return {"error": "Unauthorized"}
-
-	data = frappe.request.get_json()
-	id = data.get("name") or data.get("id")
-	if not id:
-		return {"error": "Missing Stock Entry ID"}
-
-	try:
-		frappe.delete_doc("Stock Entry", id, ignore_permissions=True)
-		frappe.db.commit()
-		return {"message": f"Stock Entry {id} deleted successfully"}
-	except frappe.DoesNotExistError:
-		frappe.local.response["http_status_code"] = 404
-		return {"error": "Stock Entry not found"}
-	except Exception as e:
-		frappe.log_error(frappe.get_traceback(), "Delete Stock Entry API")
-		return {"error": str(e)}
-
-@frappe.whitelist(allow_guest=True)
 def getStockEntryDetails():
 	if frappe.request.method != "POST":
 		frappe.local.response["http_status_code"] = 405
@@ -787,6 +820,30 @@ def getStockEntryDetails():
 		return {"error": str(e)}
 	
 
+
+@frappe.whitelist(allow_guest=True)
+def deleteStockEntry():
+	if frappe.request.method != "POST":
+		frappe.local.response["http_status_code"] = 405
+		return {"error": "Only POST method allowed"}
+	if not authenticate_user():
+		return {"error": "Unauthorized"}
+
+	data = frappe.request.get_json()
+	id = data.get("name") or data.get("id")
+	if not id:
+		return {"error": "Missing Stock Entry ID"}
+
+	try:
+		frappe.delete_doc("Stock Entry", id, ignore_permissions=True)
+		frappe.db.commit()
+		return {"message": f"Stock Entry {id} deleted successfully"}
+	except frappe.DoesNotExistError:
+		frappe.local.response["http_status_code"] = 404
+		return {"error": "Stock Entry not found"}
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Delete Stock Entry API")
+		return {"error": str(e)}
 
 
 # ------------------ CREATE MANUFACTURER ------------------
