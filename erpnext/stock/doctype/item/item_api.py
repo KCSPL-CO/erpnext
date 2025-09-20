@@ -386,7 +386,7 @@ def listMaterialRequests():
 	try:
 		mr_list = frappe.get_all(
 			"Material Request",
-			fields=["name", "material_request_type", "status", "transaction_date", "company"],
+			fields=["name","title", "material_request_type","schedule_date", "set_warehouse","status", "transaction_date", "company"],
 			order_by="creation desc",
 			# limit_page_length=20
 		)
