@@ -42,12 +42,14 @@
   "branch",
   "employment_details",
   "scheduled_confirmation_date",
+  "contract_start_date",
   "column_break_32",
   "final_confirmation_date",
   "contract_end_date",
   "col_break_22",
   "notice_number_of_days",
   "date_of_retirement",
+  "date_of_rehiring",
   "contact_details",
   "cell_number",
   "column_break_40",
@@ -77,11 +79,15 @@
   "ctc",
   "salary_currency",
   "salary_mode",
+  "column_break_zbcl",
+  "pan",
+  "esic_no",
+  "pf_acc",
   "bank_details_section",
   "bank_name",
+  "iban",
   "column_break_heye",
   "bank_ac_no",
-  "iban",
   "personal_details",
   "marital_status",
   "family_background",
@@ -91,9 +97,12 @@
   "passport_details_section",
   "passport_number",
   "valid_upto",
+  "aadhar_number",
   "column_break_73",
   "date_of_issue",
   "place_of_issue",
+  "section_break_gmnq",
+  "employee_dependants",
   "profile_tab",
   "bio",
   "educational_qualification",
@@ -822,6 +831,52 @@
    "fieldtype": "Link",
    "label": "Signature",
    "options": "Signature"
+  },
+  {
+   "fieldname": "section_break_gmnq",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "aadhar_number",
+   "fieldtype": "Data",
+   "label": "Aadhar Number"
+  },
+  {
+   "fieldname": "contract_start_date",
+   "fieldtype": "Date",
+   "label": "Contract Start Date"
+  },
+  {
+   "fieldname": "date_of_rehiring",
+   "fieldtype": "Date",
+   "label": "Date Of Rehiring",
+   "oldfieldname": "date_of_retirement",
+   "oldfieldtype": "Date"
+  },
+  {
+   "fieldname": "esic_no",
+   "fieldtype": "Data",
+   "label": "ESIC No"
+  },
+  {
+   "fieldname": "pf_acc",
+   "fieldtype": "Data",
+   "label": "PF Account"
+  },
+  {
+   "fieldname": "pan",
+   "fieldtype": "Data",
+   "label": "PAN Number"
+  },
+  {
+   "fieldname": "column_break_zbcl",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "employee_dependants",
+   "fieldtype": "Table",
+   "label": "Employee Dependent ",
+   "options": "Employee Dependant"
   }
  ],
  "icon": "fa fa-user",
@@ -829,7 +884,7 @@
  "image_field": "image",
  "is_tree": 1,
  "links": [],
- "modified": "2025-06-26 10:41:52.226639",
+ "modified": "2025-09-26 12:12:56.596388",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Employee",

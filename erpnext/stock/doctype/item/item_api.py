@@ -695,7 +695,7 @@ def createStockEntry():
 @frappe.whitelist(allow_guest=True)
 def changeStockEntryStatus():
     if frappe.request.method != "POST":
-        frappe.local.response["http_status_code"] = 405
+        frappe.local.response["http_status_code"] = 405   
         return {"error": "Only POST method allowed"}
     
     if not authenticate_user():
