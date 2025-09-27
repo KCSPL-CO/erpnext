@@ -1648,9 +1648,12 @@ def get_sales_details_with_patient_info():
     # Items with GST Split
     items = []
     for item in doc.items:
+        parent_item_group = frappe.get_value("Item", item.item_code, "parent_item_group")
+
         item_data = {
             "item_code": item.item_code,
             "item_group": item.item_group,
+            "parent_item_group": parent_item_group,
             "item_name": item.item_name,
             "qty": item.qty,
             "rate": item.rate,
