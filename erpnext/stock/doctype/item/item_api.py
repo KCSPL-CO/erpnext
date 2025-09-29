@@ -997,10 +997,7 @@ def get_brand(brand_id):
     doc = frappe.get_doc("Brand", brand_id)
     return {
         "success": True,
-        "data": {
-            "name": doc.name,
-            "brand": doc.brand
-        }
+        "data": doc.as_dict()
     }
 
 
