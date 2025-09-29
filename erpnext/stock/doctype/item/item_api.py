@@ -957,44 +957,62 @@ def create_brand():
 
     content_type = frappe.get_request_header("Content-Type", "")
 
+    doc = frappe.new_doc("Brand")
+
     if "multipart/form-data" in content_type:
-        # Handle file + form data
         brand = frappe.form_dict.get("brand")
         description = frappe.form_dict.get("description")
-        image = frappe.form_dict.get("image")  # This will be file object if uploaded
-
-        doc = frappe.new_doc("Brand")
         doc.brand = brand
         doc.description = description
+        doc.insert(ignore_permissions=True)
 
-        # Save uploaded file if provided
+        # Child table: brand_defaults
+        brand_defaults_json = frappe.form_dict.get("brand_defaults")
+        if brand_defaults_json:
+            try:
+                defaults = json.loads(brand_defaults_json)
+                for row in defaults:
+                    doc.append("brand_defaults", {
+                        "company": row.get("company"),
+                        "default_warehouse": row.get("default_warehouse"),
+                        "default_price_list": row.get("default_price_list"),
+                        "default_discount_account": row.get("default_discount_account"),
+                        "default_supplier": row.get("default_supplier"),
+                        "expense_account": row.get("expense_account"),
+                        "selling_cost_center": row.get("selling_cost_center"),
+                        "income_account": row.get("income_account"),
+                    })
+            except Exception as e:
+                frappe.log_error(f"Brand Defaults parse error: {str(e)}")
+
+        # Handle file
         if frappe.request.files.get("image"):
             file = frappe.request.files["image"]
             _file = frappe.get_doc({
                 "doctype": "File",
                 "file_name": file.filename,
                 "attached_to_doctype": "Brand",
-                "attached_to_name": brand,
-                "is_private": 0,
-                "content": file.stream.read()
+                "attached_to_name": doc.name,
+                "is_private": 0
             })
-            _file.save(ignore_permissions=True)
+            _file.insert(ignore_permissions=True)
+            _file.save_file(file.filename, file.stream, is_private=0)
             doc.image = _file.file_url
 
-    else:
-        # Handle normal JSON request
-        data = json.loads(frappe.request.data or "{}")
+        doc.save(ignore_permissions=True)
 
-        doc = frappe.new_doc("Brand")
+    else:
+        data = json.loads(frappe.request.data or "{}")
         doc.brand = data.get("brand")
         doc.description = data.get("description")
-        doc.image = data.get("image")  # Expecting file_url or base64 (depends on frontend)
+        doc.image = data.get("image")
+        # JSON child table
+        for row in data.get("brand_defaults", []):
+            doc.append("brand_defaults", row)
+        doc.insert(ignore_permissions=True)
 
-    doc.insert(ignore_permissions=True)
     frappe.db.commit()
-
     return {"message": "Brand created", "name": doc.name, "success": True}
-
 
 # ------------------ GET ALL BRANDS ------------------
 @frappe.whitelist(allow_guest=False)
