@@ -946,9 +946,20 @@ def update_manufacturer(manufacturer_id):
 
 
 # ------------------ CREATE BRAND ------------------
+import frappe
+import json
+import base64
+from frappe import _
+
 @frappe.whitelist(allow_guest=False)
 def create_brand():
-    import json
+    """
+    API to create a Brand with:
+    - brand (string)
+    - description (string)
+    - image (file upload)
+    - brand_defaults (child table as JSON array)
+    """
 
     if frappe.request.method != "POST":
         frappe.local.response["http_status_code"] = 405
@@ -957,50 +968,61 @@ def create_brand():
     if not authenticate_user():
         return {"message": "Unauthorized", "success": False}
 
-    doc = frappe.new_doc("Brand")
-
     content_type = frappe.get_request_header("Content-Type", "")
 
-    if "multipart/form-data" in content_type:
-        # Form fields
-        doc.brand = frappe.form_dict.get("brand")
-        doc.description = frappe.form_dict.get("description")
+    doc = frappe.new_doc("Brand")
 
-        # Handle file upload
-        if "image" in frappe.request.files:
-            file = frappe.request.files["image"]
-            _file = frappe.get_doc({
-                "doctype": "File",
-                "file_name": file.filename,
-                "attached_to_doctype": "Brand",
-                "attached_to_name": doc.brand,
-                "is_private": 0,
-                "content": file.read(),  # <-- pass bytes directly
-            })
-            _file.insert(ignore_permissions=True)
-            frappe.db.commit()
-            doc.image = _file.file_url
+    try:
+        # Handle multipart/form-data (file + form fields)
+        if "multipart/form-data" in content_type:
+            doc.brand = frappe.form_dict.get("brand")
+            doc.description = frappe.form_dict.get("description")
 
-        # Handle table JSON
-        if frappe.form_dict.get("brand_defaults"):
-            try:
-                doc.brand_defaults = json.loads(frappe.form_dict.get("brand_defaults"))
-            except:
-                pass
+            # Handle child table
+            if frappe.form_dict.get("brand_defaults"):
+                brand_defaults_list = json.loads(frappe.form_dict.get("brand_defaults"))
+                for row in brand_defaults_list:
+                    doc.append("brand_defaults", row)  # Append each row as child
 
-    else:
-        # JSON request fallback
-        data = json.loads(frappe.request.data or "{}")
-        doc.brand = data.get("brand")
-        doc.description = data.get("description")
-        doc.image = data.get("image")
-        doc.brand_defaults = data.get("brand_defaults", [])
+            # Handle image upload
+            if "image" in frappe.request.files:
+                file = frappe.request.files["image"]
+                file_content = file.stream.read()  # Read bytes
+                _file = frappe.get_doc({
+                    "doctype": "File",
+                    "file_name": file.filename,
+                    "attached_to_doctype": "Brand",
+                    "attached_to_name": doc.name,
+                    "is_private": 0,
+                    "content": file_content
+                })
+                _file.insert(ignore_permissions=True)
+                frappe.db.commit()
+                doc.image = _file.file_url
 
-    doc.insert(ignore_permissions=True)
-    frappe.db.commit()
+        else:
+            # Handle normal JSON request
+            data = json.loads(frappe.request.data or "{}")
+            doc.brand = data.get("brand")
+            doc.description = data.get("description")
 
-    return {"message": "Brand created", "name": doc.name, "success": True}
+            # Child table
+            for row in data.get("brand_defaults", []):
+                doc.append("brand_defaults", row)
 
+            # Image URL or base64
+            if data.get("image"):
+                doc.image = data.get("image")
+
+        # Insert the main document
+        doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+
+        return {"message": f"Brand '{doc.brand}' created successfully", "name": doc.name, "success": True}
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Create Brand API Error")
+        return {"message": str(e), "success": False}
 # ------------------ GET ALL BRANDS ------------------
 @frappe.whitelist(allow_guest=False)
 def get_all_brands():
