@@ -978,7 +978,7 @@ def get_all_brands():
 
     brands = frappe.get_all(
         "Brand",
-        fields=["name", "brand"],
+        fields=["name", "brand","description"],
         order_by="modified desc"
     )
     return {"success": True, "data": brands}
