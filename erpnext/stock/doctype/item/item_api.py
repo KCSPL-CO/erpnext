@@ -955,10 +955,40 @@ def create_brand():
     if not authenticate_user():
         return {"message": "Unauthorized", "success": False}
 
-    data = json.loads(frappe.request.data or "{}")
+    content_type = frappe.get_request_header("Content-Type", "")
 
-    doc = frappe.new_doc("Brand")
-    doc.brand = data.get("brand")
+    if "multipart/form-data" in content_type:
+        # Handle file + form data
+        brand = frappe.form_dict.get("brand")
+        description = frappe.form_dict.get("description")
+        image = frappe.form_dict.get("image")  # This will be file object if uploaded
+
+        doc = frappe.new_doc("Brand")
+        doc.brand = brand
+        doc.description = description
+
+        # Save uploaded file if provided
+        if frappe.request.files.get("image"):
+            file = frappe.request.files["image"]
+            _file = frappe.get_doc({
+                "doctype": "File",
+                "file_name": file.filename,
+                "attached_to_doctype": "Brand",
+                "attached_to_name": brand,
+                "is_private": 0,
+                "content": file.stream.read()
+            })
+            _file.save(ignore_permissions=True)
+            doc.image = _file.file_url
+
+    else:
+        # Handle normal JSON request
+        data = json.loads(frappe.request.data or "{}")
+
+        doc = frappe.new_doc("Brand")
+        doc.brand = data.get("brand")
+        doc.description = data.get("description")
+        doc.image = data.get("image")  # Expecting file_url or base64 (depends on frontend)
 
     doc.insert(ignore_permissions=True)
     frappe.db.commit()
