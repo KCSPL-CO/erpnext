@@ -948,7 +948,7 @@ def update_manufacturer(manufacturer_id):
 # ------------------ CREATE BRAND ------------------
 @frappe.whitelist(allow_guest=False)
 def create_brand():
-    import base64
+    import json
 
     if frappe.request.method != "POST":
         frappe.local.response["http_status_code"] = 405
@@ -957,37 +957,32 @@ def create_brand():
     if not authenticate_user():
         return {"message": "Unauthorized", "success": False}
 
-    content_type = frappe.get_request_header("Content-Type", "")
-
     doc = frappe.new_doc("Brand")
+
+    content_type = frappe.get_request_header("Content-Type", "")
 
     if "multipart/form-data" in content_type:
         # Form fields
-        brand = frappe.form_dict.get("brand")
-        description = frappe.form_dict.get("description")
-        doc.brand = brand
-        doc.description = description
+        doc.brand = frappe.form_dict.get("brand")
+        doc.description = frappe.form_dict.get("description")
 
         # Handle file upload
         if "image" in frappe.request.files:
             file = frappe.request.files["image"]
-            # Convert file content to base64
-            file_content = base64.b64encode(file.read()).decode()
             _file = frappe.get_doc({
                 "doctype": "File",
                 "file_name": file.filename,
                 "attached_to_doctype": "Brand",
-                "attached_to_name": brand,
+                "attached_to_name": doc.brand,
                 "is_private": 0,
-                "content": file_content,  # base64 content
+                "content": file.read(),  # <-- pass bytes directly
             })
             _file.insert(ignore_permissions=True)
             frappe.db.commit()
             doc.image = _file.file_url
 
-        # Handle table JSON if exists
+        # Handle table JSON
         if frappe.form_dict.get("brand_defaults"):
-            import json
             try:
                 doc.brand_defaults = json.loads(frappe.form_dict.get("brand_defaults"))
             except:
@@ -995,7 +990,6 @@ def create_brand():
 
     else:
         # JSON request fallback
-        import json
         data = json.loads(frappe.request.data or "{}")
         doc.brand = data.get("brand")
         doc.description = data.get("description")
