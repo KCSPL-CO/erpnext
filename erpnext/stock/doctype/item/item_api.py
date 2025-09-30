@@ -948,6 +948,8 @@ def update_manufacturer(manufacturer_id):
 # ------------------ CREATE BRAND ------------------
 @frappe.whitelist(allow_guest=False)
 def create_brand():
+    import json
+
     if frappe.request.method != "POST":
         frappe.local.response["http_status_code"] = 405
         return {"error": "Method Not Allowed"}
@@ -959,50 +961,62 @@ def create_brand():
     doc = frappe.new_doc("Brand")
 
     try:
-        # Fields
+        # Multipart request
         if "multipart/form-data" in content_type:
             doc.brand = frappe.form_dict.get("brand")
             doc.description = frappe.form_dict.get("description")
 
-            # Child table
+            # Handle child table
             if frappe.form_dict.get("brand_defaults"):
                 brand_defaults_list = json.loads(frappe.form_dict.get("brand_defaults"))
                 for row in brand_defaults_list:
                     doc.append("brand_defaults", row)
 
-            # Insert Brand first
+            # Save Brand first
             doc.insert(ignore_permissions=True)
             frappe.db.commit()
 
-            # Handle file upload
+            # File upload
             if "image" in frappe.request.files:
                 file = frappe.request.files["image"]
+                file_content = file.read()   # <-- raw bytes, no base64
+
                 _file = frappe.get_doc({
                     "doctype": "File",
                     "file_name": file.filename,
                     "attached_to_doctype": "Brand",
-                    "attached_to_name": doc.name,  # NOW doc.name exists
+                    "attached_to_name": doc.name,
                     "is_private": 0,
-                    "content": file.stream.read()
+                    "content": file_content,   # <-- raw bytes here
                 })
                 _file.insert(ignore_permissions=True)
                 frappe.db.commit()
+
+                # Save file URL into Brand
                 doc.image = _file.file_url
-                doc.save()  # Save the file URL to Brand
+                doc.save(ignore_permissions=True)
 
         else:
             # JSON fallback
             data = json.loads(frappe.request.data or "{}")
             doc.brand = data.get("brand")
             doc.description = data.get("description")
+
             for row in data.get("brand_defaults", []):
                 doc.append("brand_defaults", row)
+
             doc.insert(ignore_permissions=True)
             frappe.db.commit()
-            doc.image = data.get("image")
-            doc.save()
 
-        return {"message": f"Brand '{doc.brand}' created successfully", "name": doc.name, "success": True}
+            if data.get("image"):
+                doc.image = data.get("image")
+                doc.save(ignore_permissions=True)
+
+        return {
+            "message": f"Brand '{doc.brand}' created successfully",
+            "name": doc.name,
+            "success": True,
+        }
 
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Create Brand API Error")
