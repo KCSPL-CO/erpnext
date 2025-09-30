@@ -1162,3 +1162,253 @@ def update_uom(uom_id):
     frappe.db.commit()
 
     return {"message": "UOM updated", "name": doc.name, "success": True}
+
+
+
+# ------------------ Generic List API ------------------
+def get_list_api(doctype):
+    """Generic list API with pagination and auth"""
+    if frappe.request.method != "GET":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only GET method allowed"}
+ 
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+ 
+    try:
+        # Pagination
+        limit_start = int(frappe.form_dict.get("limit_start", 0))
+        raw_limit = frappe.form_dict.get("limit_page_length", 10)
+ 
+        total = frappe.db.count(doctype)
+        if str(raw_limit).lower() in ("0", "all"):
+            limit_page_length = total
+        else:
+            try:
+                limit_page_length = int(raw_limit)
+            except ValueError:
+                limit_page_length = 10
+ 
+        MAX_LIMIT = 1000
+        if limit_page_length > MAX_LIMIT:
+            limit_page_length = MAX_LIMIT
+ 
+        data = frappe.get_all(
+            doctype,
+            fields=["*"],
+            order_by="creation desc",
+            limit_start=limit_start,
+            limit_page_length=limit_page_length,
+        )
+ 
+        return {
+            "total": total,
+            "limit_start": limit_start,
+            "applied_limit": limit_page_length,
+            "returned_count": len(data),
+            "data": data,
+        }
+ 
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), f"List API for {doctype}")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
+ 
+@frappe.whitelist(allow_guest=True)
+def listItemTaxTemplate():
+    return get_list_api("Item Tax Template")
+ 
+
+
+@frappe.whitelist()
+def create_item_tax_template():
+    """API to create Item Tax Template with child rows (Tax Rates)"""
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+
+    # --- Authentication check ---
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+
+    try:
+        data = frappe.form_dict  # request payload
+
+        # Required fields
+        title = data.get("title")
+        company = data.get("company")
+        tax_rates = data.get("tax_rates")  # expecting JSON array
+
+        if not title or not company:
+            return {"error": "Missing required fields: title or company"}
+
+        # Create new Doc
+        doc = frappe.new_doc("Item Tax Template")
+        doc.title = title
+        doc.company = company
+        doc.disabled = data.get("disabled", 0)
+
+        # Handle child table: tax_rates
+        # Expecting: [{"tax_type": "GST 18%", "tax_rate": 18}, ...]
+        if tax_rates:
+            if isinstance(tax_rates, str):
+                import json
+                tax_rates = json.loads(tax_rates)
+
+            for tr in tax_rates:
+                doc.append("taxes", {
+                    "tax_type": tr.get("tax_type"),
+                    "tax_rate": tr.get("tax_rate")
+                })
+
+        doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+
+        return {
+            "success": True,
+            "message":("Item Tax Template created successfully"),
+            "id": doc.name
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Create Item Tax Template API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
+
+
+
+
+@frappe.whitelist()
+def get_item_tax_template():
+    """API to fetch Item Tax Template by ID (via POST body)"""
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+
+    # --- Authentication check ---
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+
+    try:
+        data = frappe.form_dict  # request payload
+        doc_id = data.get("id")
+
+        if not doc_id:
+            return {"error": "Missing required field: id"}
+
+        # Fetch document
+        doc = frappe.get_doc("Item Tax Template", doc_id)
+
+        # Serialize doc with children
+        result = {
+            "id": doc.name,
+            "title": doc.title,
+            "company": doc.company,
+            "disabled": doc.disabled,
+            "tax_rates": [
+                {
+                    "tax_type": tr.tax_type,
+                    "tax_rate": tr.tax_rate
+                } for tr in doc.taxes
+            ]
+        }
+
+        return {"success": True, "data": result}
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Get Item Tax Template API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
+
+
+@frappe.whitelist(allow_guest=True)
+def listSalesTaxAndChargesTemplate():
+    return get_list_api("Sales Taxes and Charges Template")
+ 
+
+
+
+# -------------------------------
+# CREATE API
+# -------------------------------
+@frappe.whitelist(allow_guest=False)
+def create_sales_taxes_template():
+    import json
+
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"success": False, "message": "Method Not Allowed"}
+
+    try:
+        data = frappe.request.get_data(as_text=True)
+        if not data:
+            return {"success": False, "message": "No data provided"}
+
+        payload = json.loads(data)
+
+        # Create parent document
+        doc = frappe.new_doc("Sales Taxes and Charges Template")
+        doc.title = payload.get("title")
+        doc.is_default = payload.get("is_default", 0)
+        doc.company = payload.get("company")
+
+        # Add child table rows
+        taxes = payload.get("taxes", [])
+        for row in taxes:
+            doc.append("taxes", {
+                "charge_type": row.get("charge_type"),
+                "account_head": row.get("account_head"),
+                "rate": row.get("rate"),
+                "description": row.get("description"),
+                "included_in_print_rate": row.get("included_in_print_rate", 0),
+            })
+
+        doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+
+        return {
+            "success": True,
+            "message": f"Sales Taxes Template '{doc.name}' created successfully",
+            "data": doc.as_dict()
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Create Sales Taxes Template API")
+        return {"success": False, "message": str(e)}
+
+
+# -------------------------------
+# DETAILS API
+# -------------------------------
+@frappe.whitelist(allow_guest=False)
+def get_sales_taxes_template():
+    import json
+
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"success": False, "message": "Method Not Allowed"}
+
+    try:
+        data = frappe.request.get_data(as_text=True)
+        if not data:
+            return {"success": False, "message": "No data provided"}
+
+        payload = json.loads(data)
+        template_id = payload.get("template_id")
+
+        if not template_id:
+            return {"success": False, "message": "template_id is required"}
+
+        doc = frappe.get_doc("Sales Taxes and Charges Template", template_id)
+
+        return {
+            "success": True,
+            "data": doc.as_dict()
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Get Sales Taxes Template API")
+        return {"success": False, "message": str(e)}
