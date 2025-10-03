@@ -1490,3 +1490,116 @@ def update_sales_taxes_template():
 def list_tax_category():
     return get_list_api("Tax Category")
  
+
+
+ # -------------------------------
+# Create Tax Category API
+# -------------------------------
+ 
+@frappe.whitelist()
+def create_tax_category():
+    """API to create Tax Category"""
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+ 
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+ 
+    try:
+        data = frappe.request.get_json(force=True)
+ 
+        title = data.get("title")
+        if not title:
+            return {"error": "Missing required field: title"}
+ 
+        doc = frappe.new_doc("Tax Category")
+        doc.title = title
+        doc.disabled = data.get("disabled", 0)
+ 
+        doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+ 
+        return {
+            "success": True,
+            "message": f"Tax Category {doc.name} created successfully",
+            "id": doc.name,
+            # "data": doc.as_dict()
+        }
+ 
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Create Tax Category API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
+ 
+# -------------------------------
+# DETAILS TAX CATEGORY
+# -------------------------------
+@frappe.whitelist(allow_guest=False)
+def get_tax_category(name=None):
+    """Get details of a single Tax Category"""
+    if not name:
+        return {"error": "Tax Category name is required"}
+ 
+    try:
+        doc = frappe.get_doc("Tax Category", name)
+        return {
+            "success": True,
+            "data": doc.as_dict()
+        }
+ 
+    except frappe.DoesNotExistError:
+        frappe.local.response["http_status_code"] = 404
+        return {"error": f"Tax Category {name} does not exist"}
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Get Tax Category API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
+ 
+ 
+# -------------------------------
+# UPDATE TAX CATEGORY
+# -------------------------------
+@frappe.whitelist()
+def update_tax_category():
+    """API to update Tax Category"""
+    if frappe.request.method not in ["PUT", "POST"]:
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only PUT/POST method allowed"}
+ 
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+ 
+    try:
+        data = frappe.request.get_json(force=True)
+ 
+        name = data.get("name")
+        if not name:
+            return {"error": "Tax Category name is required for update"}
+ 
+        doc = frappe.get_doc("Tax Category", name)
+ 
+        if "title" in data:
+            doc.title = data["title"]
+        if "disabled" in data:
+            doc.disabled = data["disabled"]
+ 
+        doc.save(ignore_permissions=True)
+        frappe.db.commit()
+ 
+        return {
+            "success": True,
+            "message": f"Tax Category {doc.name} updated successfully",
+            # "data": doc.as_dict()
+        }
+ 
+    except frappe.DoesNotExistError:
+        frappe.local.response["http_status_code"] = 404
+        return {"error": f"Tax Category {name} does not exist"}
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Update Tax Category API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
+ 
