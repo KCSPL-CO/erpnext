@@ -57,7 +57,9 @@ def listItems():
                 "valuation_rate AS default_valuation_rate",
                 "safety_stock",
                 "disabled AS status",
-				"parent_item_group"
+				"parent_item_group",
+                "is_purchase_item",
+                "has_variants"
             ],
             order_by="creation desc",
         )
