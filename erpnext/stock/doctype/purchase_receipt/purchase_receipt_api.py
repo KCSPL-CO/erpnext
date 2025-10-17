@@ -5,6 +5,10 @@ from frappe.utils.password import get_decrypted_password
 from frappe.utils import flt
 from frappe.utils import today
 
+from frappe import _
+from frappe.utils import cint
+from frappe.exceptions import DoesNotExistError, ValidationError
+
 # ------------------ AUTH ------------------
 def authenticate_user():
     auth = frappe.get_request_header("Authorization")
@@ -91,6 +95,7 @@ def get_all_purchase_receipts():
 # ✅ GET Purchase Receipt by ID
 @frappe.whitelist(allow_guest=False)
 def get_purchase_receipt_by_id(name=None):
+
     """Fetch Purchase Receipt by name (ID)"""
     if not authenticate_user():
         return {"message": "Unauthorized", "success": False}
@@ -115,3 +120,64 @@ def get_purchase_receipt_by_id(name=None):
         frappe.log_error(message=str(e), title="Purchase Receipt Get By ID API Error")
         frappe.local.response["http_status_code"] = 500
         return {"error": str(e)}
+    
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def submit_purchase_receipt():
+    """Submit a Purchase Receipt by its name (ID) — via POST"""
+    # ✅ Authenticate user
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"success": False, "message": "Unauthorized access"}
+
+    try:
+        # ✅ Parse request JSON body
+        data = frappe.request.get_json()
+        if not data:
+            frappe.local.response["http_status_code"] = 400
+            return {"success": False, "message": "Missing request body"}
+
+        name = data.get("name")
+
+        # ✅ Validate required field
+        if not name:
+            frappe.local.response["http_status_code"] = 400
+            return {"success": False, "message": "Missing required field: name"}
+
+        # ✅ Fetch document
+        if not frappe.db.exists("Purchase Receipt", name):
+            frappe.local.response["http_status_code"] = 404
+            return {"success": False, "message": f"Purchase Receipt {name} not found"}
+
+        doc = frappe.get_doc("Purchase Receipt", name)
+
+        # ✅ Check if already submitted
+        if cint(doc.docstatus) == 1:
+            return {"success": False, "message": f"Purchase Receipt {name} is already submitted"}
+
+        # ✅ Submit document
+        doc.submit()
+        frappe.db.commit()
+
+        return {
+            "success": True,
+            "message": f"Purchase Receipt {name} has been successfully submitted",
+            "data": {"name": doc.name, "docstatus": doc.docstatus}
+        }
+
+    except ValidationError as ve:
+        frappe.local.response["http_status_code"] = 422
+        return {"success": False, "message": f"Validation Error: {str(ve)}"}
+
+    except DoesNotExistError:
+        frappe.local.response["http_status_code"] = 404
+        return {"success": False, "message": f"Purchase Receipt {name} not found"}
+
+    except Exception as e:
+        frappe.log_error(message=str(e), title="Purchase Receipt Submit API Error")
+        frappe.local.response["http_status_code"] = 500
+        return {"success": False, "message": str(e)}
+
+
+
