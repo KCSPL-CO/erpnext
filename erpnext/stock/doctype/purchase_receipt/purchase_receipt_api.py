@@ -180,4 +180,107 @@ def submit_purchase_receipt():
         return {"success": False, "message": str(e)}
 
 
+@frappe.whitelist(allow_guest=True)
+def create_receipt_from_order():
+    """Create a Purchase Receipt automatically from a given Purchase Order"""
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+
+    # ✅ Authentication check
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+
+    # ✅ Parse JSON body
+    data = frappe.request.get_json()
+    order_name = data.get("name")
+
+    if not order_name:
+        frappe.local.response["http_status_code"] = 400
+        return {"error": "Missing required parameter: 'name'"}
+
+    try:
+        # ✅ Check if Purchase Order exists
+        if not frappe.db.exists("Purchase Order", order_name):
+            frappe.local.response["http_status_code"] = 404
+            return {"error": f"Purchase Order '{order_name}' not found"}
+
+        # ✅ Load Purchase Order
+        po = frappe.get_doc("Purchase Order", order_name)
+
+        # ✅ Create new Purchase Receipt
+        pr = frappe.new_doc("Purchase Receipt")
+
+        # --- Copy header fields ---
+        pr.company = po.company
+        pr.supplier = po.supplier
+        pr.supplier_name = po.supplier_name
+        pr.supplier_address = getattr(po, "supplier_address", None)
+        pr.buying_price_list = getattr(po, "buying_price_list", None)
+        pr.currency = po.currency
+        pr.conversion_rate = po.conversion_rate
+        pr.posting_date = frappe.utils.nowdate()
+        pr.schedule_date = frappe.utils.nowdate()
+        pr.taxes_and_charges = getattr(po, "taxes_and_charges", None)
+        pr.shipping_rule = getattr(po, "shipping_rule", None)
+
+        # --- Copy contact & address info ---
+        pr.address_display = getattr(po, "address_display", None)
+        pr.contact_display = getattr(po, "contact_display", None)
+        pr.contact_email = getattr(po, "contact_email", None)
+        pr.contact_mobile = getattr(po, "contact_mobile", None)
+        pr.tax_category = getattr(po, "tax_category", None)
+        pr.tax_id = getattr(po, "tax_id", None)
+
+        # ✅ Copy items from Purchase Order
+        for item in po.items:
+            pr.append("items", {
+                "item_code": item.item_code,
+                "item_name": item.item_name,
+                "description": item.description,
+                "qty": item.qty - item.received_qty if item.received_qty else item.qty,
+                "uom": item.uom,
+                "rate": item.rate,
+                "amount": item.amount,
+                "warehouse": item.warehouse,
+                "purchase_order": po.name,
+                "po_detail": item.name,
+                "cost_center": item.cost_center,
+                "expense_account": item.expense_account or "Stock Received But Not Billed - " + po.company_abbr
+            })
+
+        # ✅ Copy taxes (if any)
+        if getattr(po, "taxes", None):
+            for tax in po.taxes:
+                pr.append("taxes", {
+                    "charge_type": tax.charge_type,
+                    "account_head": tax.account_head,
+                    "description": tax.description,
+                    "rate": tax.rate,
+                    "tax_amount": tax.tax_amount,
+                    "cost_center": tax.cost_center,
+                    "add_deduct_tax": tax.add_deduct_tax,
+                    "category": tax.category,
+                })
+
+        # ✅ Calculate totals automatically
+        pr.run_method("set_missing_values")
+        pr.run_method("calculate_taxes_and_totals")
+
+        # ✅ Save document
+        pr.insert(ignore_permissions=True)
+        frappe.db.commit()
+
+        return {
+            "message": f"Purchase Receipt created successfully from Purchase Order {order_name}",
+            "purchase_receipt": pr.name
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Create Purchase Receipt from Order API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
+
+
 
