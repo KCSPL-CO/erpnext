@@ -80,15 +80,13 @@ def get_list_api(doctype):
         frappe.local.response["http_status_code"] = 500
         return {"error": str(e)}
 
-# ------------------ MODE OF PAYMENT APIs ------------------
+# ------------------  Purchase taxes charges api ------------------
 
 @frappe.whitelist(allow_guest=True)
 def list_pur_tax_char_temp():
     return get_list_api("Purchase Taxes and Charges Template")
 
 
-
-# ------------------ CREATE ------------------
 
 # ------------------ CREATE ------------------
 @frappe.whitelist(allow_guest=True)

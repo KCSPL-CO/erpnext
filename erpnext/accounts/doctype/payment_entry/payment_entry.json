@@ -80,6 +80,7 @@
   "deductions",
   "transaction_references",
   "reference_no",
+  "terminal",
   "column_break_23",
   "reference_date",
   "clearance_date",
@@ -813,6 +814,13 @@
    "fieldname": "cash_return",
    "fieldtype": "Data",
    "label": "Cash Return"
+  },
+  {
+   "depends_on": "eval:(['UPI'].includes(doc.mode_of_payment))\n",
+   "fieldname": "terminal",
+   "fieldtype": "Link",
+   "label": "Terminal",
+   "options": "Terminal Master"
   }
  ],
  "grid_page_length": 50,
@@ -827,7 +835,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2025-07-25 15:18:22.350103",
+ "modified": "2025-10-20 15:48:13.307190",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Entry",
