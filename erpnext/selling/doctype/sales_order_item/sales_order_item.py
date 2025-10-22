@@ -30,6 +30,8 @@ class SalesOrderItem(Document):
 		blanket_order_rate: DF.Currency
 		bom_no: DF.Link | None
 		brand: DF.Link | None
+		cgst_amount: DF.Data | None
+		cgst_rate: DF.Data | None
 		company_total_stock: DF.Float
 		conversion_factor: DF.Float
 		cost_center: DF.Link | None
@@ -44,6 +46,8 @@ class SalesOrderItem(Document):
 		ensure_delivery_based_on_produced_serial_no: DF.Check
 		grant_commission: DF.Check
 		gross_profit: DF.Currency
+		igst_amount: DF.Data | None
+		igst_rate: DF.Data | None
 		image: DF.Attach | None
 		is_free_item: DF.Check
 		is_stock_item: DF.Check
@@ -82,6 +86,8 @@ class SalesOrderItem(Document):
 		reference_dt: DF.Link | None
 		reserve_stock: DF.Check
 		returned_qty: DF.Float
+		sgst_amount: DF.Data | None
+		sgst_rate: DF.Data | None
 		stock_qty: DF.Float
 		stock_reserved_qty: DF.Float
 		stock_uom: DF.Link | None

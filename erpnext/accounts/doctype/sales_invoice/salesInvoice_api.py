@@ -571,6 +571,188 @@ def create_sales_invoice():
         return {"error": str(e)}
 
 
+@frappe.whitelist(allow_guest=True)
+def create_invoice_from_sales_order():
+    """Create Sales Invoice automatically from a given Sales Order"""
+    if frappe.request.method != "POST":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only POST method allowed"}
+
+    if not authenticate_user():
+        frappe.local.response["http_status_code"] = 401
+        return {"error": "Unauthorized"}
+
+    data = frappe.request.get_json()
+    so_name = data.get("name")
+    if not so_name:
+        frappe.local.response["http_status_code"] = 400
+        return {"error": "Missing required parameter: 'name'"}
+    
+    si = frappe.new_doc("Sales Invoice")
+
+    try:
+        if not frappe.db.exists("Sales Order", so_name):
+            frappe.local.response["http_status_code"] = 404
+            return {"error": f"Sales Order '{so_name}' not found"}
+
+        so = frappe.get_doc("Sales Order", so_name)
+
+
+                # Enrich items with tax calculation
+        enriched_items = []
+
+        for item in so.items:
+            item_dict = item.as_dict()  # convert child DocType to dict
+
+            # Reset per line
+            cgst_rate = sgst_rate = igst_rate = 0.0
+            cgst_amt = sgst_amt = igst_amt = 0.0
+
+            qty = float(item_dict.get("qty") or 0)
+            rate = float(item_dict.get("rate") or 0)
+            base_amount = round(qty * rate, 2)
+            total_amount = base_amount
+
+            item_code = item_dict.get("item_code")
+            if item_code:
+                item_tax_template = frappe.db.get_value(
+                    "Item Tax", {"parent": item_code}, "item_tax_template"
+                )
+                if item_tax_template:
+                    item_dict["item_tax_template"] = item_tax_template
+                    try:
+                        template = frappe.get_doc("Item Tax Template", item_tax_template)
+                        for t in template.taxes:
+                            tax_type = (t.tax_type or "").upper()
+                            rate_pct = float(t.tax_rate or 0)
+                            if "CGST" in tax_type:
+                                cgst_rate = rate_pct
+                                cgst_amt = round(base_amount * rate_pct / 100.0, 2)
+                            elif "SGST" in tax_type:
+                                sgst_rate = rate_pct
+                                sgst_amt = round(base_amount * rate_pct / 100.0, 2)
+                            elif "IGST" in tax_type:
+                                igst_rate = rate_pct
+                                igst_amt = round(base_amount * rate_pct / 100.0, 2)
+                        
+                            si.append("taxes", {
+                                "charge_type": "On Net Total",
+                                "account_head": t.tax_type,
+                                # "rate": rate_pct,
+                                "tax_amount": round(base_amount * rate_pct / 100.0, 2),
+                                "description": item.item_name
+                            })
+                        total_amount = round(base_amount + cgst_amt + sgst_amt + igst_amt, 2)
+                    except frappe.DoesNotExistError:
+                        pass
+
+            # Map delivered date
+            item_dict["delivered_date"] = item_dict.get("delivery_date") or so.delivery_date
+            item_dict["sales_order"] = item_dict.parent      # parent Sales Order
+            item_dict["so_detail"] = item_dict.name         # Sales Order Item name
+            item_dict["reference_dt"] = item_dict.get("reference_dt")
+            item_dict["reference_dn"] = item_dict.get("reference_dn")
+
+            # Write computed fields back to dict
+            item_dict["base_amount"] = base_amount
+            item_dict["cgst_rate"] = cgst_rate
+            item_dict["cgst_amount"] = cgst_amt
+            item_dict["sgst_rate"] = sgst_rate
+            item_dict["sgst_amount"] = sgst_amt
+            item_dict["igst_rate"] = igst_rate
+            item_dict["igst_amount"] = igst_amt
+            item_dict["total_amount"] = total_amount
+
+            enriched_items.append(item_dict)
+
+        # Prepare Sales Invoice doc
+        company = frappe.defaults.get_user_default("Company")
+        currency = frappe.db.get_value("Company", company, "default_currency") or "INR"
+        year = frappe.utils.now_datetime().year
+        naming_series = f"IP-SINV-{year}-"
+
+       
+        si.company = company
+        si.currency = currency
+        si.conversion_rate = 1
+        si.plc_conversion_rate = 1
+        si.is_ip_bill = 1
+        
+        si.naming_series = naming_series
+        si.customer = so.customer
+        si.customer_name = so.customer_name
+        si.inpatient_record = so.inpatient_record
+        si.patient = so.patient
+
+        
+        si.customer_address = getattr(so, "customer_address", None)
+        si.contact_display = getattr(so, "contact_display", None)
+        si.contact_email = getattr(so, "contact_email", None)
+        si.contact_mobile = getattr(so, "contact_mobile", None)
+        si.taxes_and_charges = getattr(so, "taxes_and_charges", None)
+
+        # Add items
+        for item in enriched_items:
+            si.append("items", {
+                "item_code": item["item_code"],
+                "item_name": item["item_name"],
+                "description": item["description"],
+                "qty": item["qty"],
+                "uom": item["uom"],
+                "rate": item["rate"],
+                "amount": item["amount"],
+                "base_amount": item["base_amount"],
+                "cgst_rate": item["cgst_rate"],
+                "cgst_amount": item["cgst_amount"],
+                "sgst_rate": item["sgst_rate"],
+                "sgst_amount": item["sgst_amount"],
+                "igst_rate": item["igst_rate"],
+                "igst_amount": item["igst_amount"],
+                "total_amount": item["total_amount"],
+                "delivered_date": item["delivered_date"],
+                # "item_tax_template": item.get("item_tax_template"), 
+                "sales_order": item["sales_order"],
+                "so_detail": item["so_detail"],
+                "reference_dt": item.get("reference_dt"),
+                "reference_dn": item.get("reference_dn"),
+                "cost_center": item["cost_center"],
+            })
+
+
+        # Add taxes from Item Tax Template
+        # for item in enriched_items:
+        #     if item.get("item_tax_template"):
+        #         template = frappe.get_doc("Item Tax Template", item["item_tax_template"])
+        #         for tax in template.taxes:
+        #             si.append("taxes", {
+        #                 "charge_type": "On Net Total",
+        #                 "account_head": tax.tax_type,
+        #                 "rate": tax.tax_rate,
+        #                 "description": item.item_name
+        #             })
+
+
+
+        # Calculate totals
+        si.run_method("set_missing_values")
+        si.run_method("calculate_taxes_and_totals")
+
+        # Insert and commit
+        si.insert(ignore_permissions=True)
+        frappe.db.commit()
+
+        return {
+            "message": f"Sales Invoice created successfully from Sales Order {so_name}",
+            "sales_invoice": si.name
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Create Sales Invoice from Sales Order API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
+
+
+
 # 3. Update Sales Invoice
 @frappe.whitelist(allow_guest=True)
 def updateSalesInvoice():
@@ -1760,12 +1942,15 @@ def get_sales_details_with_patient_info():
         "apply_discount_on": doc.apply_discount_on,
         "additional_discount_percentage": doc.additional_discount_percentage,
         "discount_amount": doc.discount_amount,
+        
     }
 
     if doctype == "Sales Order":
         financial_info["advance_paid"] = doc.advance_paid
     elif doctype == "Sales Invoice":
         financial_info["total_advance"] = doc.total_advance
+        financial_info["advances"] = doc.advances
+       
         financial_info["outstanding_amount"] = doc.outstanding_amount
         financial_info["paid_date"] = getattr(doc, "paid_date", None)
 

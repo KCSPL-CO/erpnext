@@ -95,7 +95,7 @@ class SalesOrder(SellingController):
 		customer_address: DF.Link | None
 		customer_group: DF.Link | None
 		customer_name: DF.Data | None
-		delivery_date: DF.Date | None
+		delivery_date: DF.Datetime | None
 		delivery_status: DF.Literal["Not Delivered", "Fully Delivered", "Partly Delivered", "Closed", "Not Applicable"]
 		disable_rounded_total: DF.Check
 		discount_amount: DF.Currency
@@ -117,7 +117,7 @@ class SalesOrder(SellingController):
 		loyalty_amount: DF.Currency
 		loyalty_points: DF.Int
 		named_place: DF.Data | None
-		naming_series: DF.Literal["SAL-ORD-.YYYY.-"]
+		naming_series: DF.Literal["SAL-ORD-.YYYY.-", "IP-ORD-.YYYY.-"]
 		net_total: DF.Currency
 		order_type: DF.Literal["", "Sales", "Maintenance", "Shopping Cart"]
 		other_charges_calculation: DF.TextEditor | None

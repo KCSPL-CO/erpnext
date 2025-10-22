@@ -46,6 +46,12 @@
   "rate",
   "amount",
   "item_tax_template",
+  "cgst_rate",
+  "sgst_rate",
+  "igst_rate",
+  "cgst_amount",
+  "sgst_amount",
+  "igst_amount",
   "col_break3",
   "base_rate",
   "base_amount",
@@ -985,12 +991,42 @@
    "fieldtype": "Dynamic Link",
    "label": "Reference Name",
    "options": "reference_dt"
+  },
+  {
+   "fieldname": "cgst_rate",
+   "fieldtype": "Data",
+   "label": "CGST Rate"
+  },
+  {
+   "fieldname": "sgst_rate",
+   "fieldtype": "Data",
+   "label": "SGST Rate"
+  },
+  {
+   "fieldname": "igst_rate",
+   "fieldtype": "Data",
+   "label": "IGST Rate"
+  },
+  {
+   "fieldname": "cgst_amount",
+   "fieldtype": "Data",
+   "label": "CGST Amount"
+  },
+  {
+   "fieldname": "sgst_amount",
+   "fieldtype": "Data",
+   "label": "SGST Amount"
+  },
+  {
+   "fieldname": "igst_amount",
+   "fieldtype": "Data",
+   "label": "IGST Amount"
   }
  ],
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-08-28 11:54:31.959005",
+ "modified": "2025-10-22 15:25:20.337138",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Sales Order Item",
