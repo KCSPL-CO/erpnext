@@ -816,7 +816,7 @@
    "label": "Cash Return"
   },
   {
-   "depends_on": "eval:(['UPI'].includes(doc.mode_of_payment))\n",
+   "depends_on": "eval:(['UPI','Card'].includes(doc.mode_of_payment))\n",
    "fieldname": "terminal",
    "fieldtype": "Link",
    "label": "Terminal",
@@ -835,7 +835,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2025-10-20 15:48:13.307190",
+ "modified": "2025-10-22 16:02:38.563661",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Entry",

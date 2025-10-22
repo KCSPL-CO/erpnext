@@ -39,6 +39,8 @@
    "fieldname": "terminal",
    "fieldtype": "Data",
    "in_list_view": 1,
+   "in_preview": 1,
+   "in_standard_filter": 1,
    "label": "Name ",
    "unique": 1
   },
@@ -84,7 +86,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-10-22 15:31:03.692109",
+ "modified": "2025-10-22 15:56:21.883068",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Terminal Master",
