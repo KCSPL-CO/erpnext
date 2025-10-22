@@ -397,7 +397,13 @@ doc_events = {
 	"Integration Request": {
 		"validate": "erpnext.accounts.doctype.payment_request.payment_request.validate_payment"
 	},
+    # "Terminal Master": {
+    #     "before_insert": "erpnext.accounts.doctype.terminal_master.terminal_master.autoname"
+	# },
+
+
 }
+
 
 # function should expect the variable and doc as arguments
 naming_series_variables = {
