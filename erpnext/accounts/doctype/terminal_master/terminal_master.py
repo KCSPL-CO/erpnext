@@ -19,9 +19,9 @@ class TerminalMaster(Document):
 		bank: DF.Link | None
 		company: DF.Link | None
 		disable: DF.Check
-		naming_series: DF.Literal["TRM-.QR.-", "TRM-.ECD.-"]
+		naming_series: DF.Literal["TRM-.QR.-", "TRM-.EDC.-"]
 		terminal: DF.Data | None
-		terminal_type: DF.Literal["QR code", "ECD"]
+		terminal_type: DF.Literal["QR code", "EDC"]
 		vendor: DF.Link | None
 	# end: auto-generated types
 	pass

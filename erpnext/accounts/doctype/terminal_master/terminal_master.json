@@ -22,7 +22,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Type",
-   "options": "QR code\nECD"
+   "options": "QR code\nEDC"
   },
   {
    "default": "0",
@@ -68,7 +68,7 @@
    "fieldname": "naming_series",
    "fieldtype": "Select",
    "label": "Series",
-   "options": "TRM-.QR.-\nTRM-.ECD.-",
+   "options": "TRM-.QR.-\nTRM-.EDC.-",
    "print_hide": 1,
    "set_only_once": 1
   },
@@ -86,7 +86,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-10-22 15:56:21.883068",
+ "modified": "2025-10-22 16:26:33.130337",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Terminal Master",
