@@ -36,6 +36,7 @@
   "section_break_11",
   "description",
   "brand",
+  "manufacturer",
   "unit_of_measure_conversion",
   "uoms",
   "dashboard_tab",
@@ -923,6 +924,12 @@
    "fieldtype": "Table",
    "label": "Tax Details",
    "options": "Item Tax Details"
+  },
+  {
+   "fieldname": "manufacturer",
+   "fieldtype": "Link",
+   "label": "Manufacturer",
+   "options": "Manufacturer"
   }
  ],
  "icon": "fa fa-tag",
@@ -930,7 +937,7 @@
  "image_field": "image",
  "links": [],
  "make_attachments_public": 1,
- "modified": "2025-08-28 17:09:21.649968",
+ "modified": "2025-10-22 18:08:37.146328",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Item",

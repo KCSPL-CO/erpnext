@@ -13,6 +13,7 @@
   "title",
   "voucher_type",
   "naming_series",
+  "date_and_time",
   "finance_book",
   "process_deferred_accounting",
   "reversal_of",
@@ -430,6 +431,7 @@
    "options": "fa fa-file-text"
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "mode_of_payment",
    "fieldtype": "Link",
    "label": "Mode of Payment",
@@ -543,6 +545,12 @@
    "label": "Is System Generated",
    "no_copy": 1,
    "read_only": 1
+  },
+  {
+   "default": "Now",
+   "fieldname": "date_and_time",
+   "fieldtype": "Datetime",
+   "label": "Date and Time"
   }
  ],
  "icon": "fa fa-file-text",
@@ -557,7 +565,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2024-07-18 15:32:29.413598",
+ "modified": "2025-10-23 10:59:45.461133",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Journal Entry",
@@ -602,6 +610,7 @@
    "role": "Auditor"
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "voucher_type,posting_date, due_date, cheque_no",
  "sort_field": "modified",
  "sort_order": "DESC",

@@ -120,6 +120,7 @@ class Item(Document):
 		item_tax_template: DF.Link | None
 		last_purchase_rate: DF.Float
 		lead_time_days: DF.Int
+		manufacturer: DF.Link | None
 		max_discount: DF.Float
 		min_order_qty: DF.Float
 		naming_series: DF.Literal["STO-ITEM-.YYYY.-"]

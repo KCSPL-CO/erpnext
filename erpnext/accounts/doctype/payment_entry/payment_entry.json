@@ -11,6 +11,7 @@
   "naming_series",
   "payment_type",
   "payment_order_status",
+  "date_and_time",
   "column_break_5",
   "posting_date",
   "company",
@@ -80,7 +81,6 @@
   "deductions",
   "transaction_references",
   "reference_no",
-  "terminal",
   "column_break_23",
   "reference_date",
   "clearance_date",
@@ -816,11 +816,11 @@
    "label": "Cash Return"
   },
   {
-   "depends_on": "eval:(['UPI','Card'].includes(doc.mode_of_payment))\n",
-   "fieldname": "terminal",
-   "fieldtype": "Link",
-   "label": "Terminal",
-   "options": "Terminal Master"
+   "allow_on_submit": 1,
+   "default": "Now",
+   "fieldname": "date_and_time",
+   "fieldtype": "Datetime",
+   "label": "Date and Time"
   }
  ],
  "grid_page_length": 50,
@@ -835,7 +835,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2025-10-22 16:02:38.563661",
+ "modified": "2025-10-23 10:53:45.454322",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Entry",

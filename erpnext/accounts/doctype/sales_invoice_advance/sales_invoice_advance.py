@@ -16,6 +16,7 @@ class SalesInvoiceAdvance(Document):
 
 		advance_amount: DF.Currency
 		allocated_amount: DF.Currency
+		date_and_time: DF.Datetime | None
 		difference_posting_date: DF.Date | None
 		exchange_gain_loss: DF.Currency
 		parent: DF.Data
