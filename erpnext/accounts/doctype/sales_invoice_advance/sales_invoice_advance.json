@@ -16,7 +16,8 @@
   "exchange_gain_loss",
   "ref_exchange_rate",
   "difference_posting_date",
-  "date_and_time"
+  "date_and_time",
+  "mode_of_payment"
  ],
  "fields": [
   {
@@ -125,13 +126,19 @@
    "fieldname": "date_and_time",
    "fieldtype": "Datetime",
    "label": "Date and Time"
+  },
+  {
+   "fieldname": "mode_of_payment",
+   "fieldtype": "Link",
+   "label": "Mode of Payment",
+   "options": "Mode of Payment"
   }
  ],
  "idx": 1,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-10-23 10:18:34.931700",
+ "modified": "2025-10-23 11:22:21.884140",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice Advance",

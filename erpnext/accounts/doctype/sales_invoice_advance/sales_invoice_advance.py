@@ -19,6 +19,7 @@ class SalesInvoiceAdvance(Document):
 		date_and_time: DF.Datetime | None
 		difference_posting_date: DF.Date | None
 		exchange_gain_loss: DF.Currency
+		mode_of_payment: DF.Link | None
 		parent: DF.Data
 		parentfield: DF.Data
 		parenttype: DF.Data

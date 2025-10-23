@@ -95,38 +95,38 @@ def get_party_and_account_balance(
 			"paid_to_account_balance": get_balance_on(paid_to, date=date, cost_center=cost_center),
 		}
 	)
-# @frappe.whitelist()
-# def fetch_customer_advances(sales_invoice_name):
-#     doc = frappe.get_doc("Sales Invoice", sales_invoice_name)
-#     doc.set_advances()
-#     return {"advances": doc.advances}
-
 @frappe.whitelist()
 def fetch_customer_advances(sales_invoice_name):
     doc = frappe.get_doc("Sales Invoice", sales_invoice_name)
     doc.set_advances()
+    return {"advances": doc.advances}
 
-    advances_data = []
-    for adv in doc.advances:
-        date_time = ""
-        mode_of_payment = ""
+# @frappe.whitelist()
+# def fetch_customer_advances(sales_invoice_name):
+#     doc = frappe.get_doc("Sales Invoice", sales_invoice_name)
+#     doc.set_advances()
 
-        # Check Journal Entry or Payment Entry
-        if adv.reference_type == "Journal Entry":
-            date_time = frappe.db.get_value("Journal Entry", adv.reference_name, "date_and_time")
-            mode_of_payment = frappe.db.get_value("Journal Entry", adv.reference_name, "mode_of_payment")
-        elif adv.reference_type == "Payment Entry":
-            date_time = frappe.db.get_value("Payment Entry", adv.reference_name, "date_and_time")
-            mode_of_payment = frappe.db.get_value("Payment Entry", adv.reference_name, "mode_of_payment")
+#     advances_data = []
+#     for adv in doc.advances:
+#         date_time = ""
+#         mode_of_payment = ""
 
-        # Convert to dictionary so we can add custom fields
-        adv_dict = adv.as_dict()
-        adv_dict["date_and_time"] = date_time or ""
-        adv_dict["mode_of_payment"] = mode_of_payment or ""
+#         # Check Journal Entry or Payment Entry
+#         if adv.reference_type == "Journal Entry":
+#             date_time = frappe.db.get_value("Journal Entry", adv.reference_name, "date_and_time")
+#             mode_of_payment = frappe.db.get_value("Journal Entry", adv.reference_name, "mode_of_payment")
+#         elif adv.reference_type == "Payment Entry":
+#             date_time = frappe.db.get_value("Payment Entry", adv.reference_name, "date_and_time")
+#             mode_of_payment = frappe.db.get_value("Payment Entry", adv.reference_name, "mode_of_payment")
 
-        advances_data.append(adv_dict)
+#         # Convert to dictionary so we can add custom fields
+#         adv_dict = adv.as_dict()
+#         adv_dict["date_and_time"] = date_time or ""
+#         adv_dict["mode_of_payment"] = mode_of_payment or ""
 
-    return {"advances": advances_data}
+#         advances_data.append(adv_dict)
+
+#     return {"advances": advances_data}
 
 
 

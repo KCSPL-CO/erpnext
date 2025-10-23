@@ -1332,12 +1332,26 @@ class AccountsController(TransactionBase):
 			allocated_amount = min(amount - advance_allocated, d.amount)
 			advance_allocated += flt(allocated_amount)
 
+			# 🕒 Fetch extra fields (date_and_time + mode_of_payment)
+			date_and_time = ""
+			mode_of_payment = ""
+
+			if d.reference_type == "Journal Entry":
+				date_and_time = frappe.db.get_value("Journal Entry", d.reference_name, "date_and_time")
+				mode_of_payment = frappe.db.get_value("Journal Entry", d.reference_name, "mode_of_payment")
+			elif d.reference_type == "Payment Entry":
+				date_and_time = frappe.db.get_value("Payment Entry", d.reference_name, "date_and_time")
+				mode_of_payment = frappe.db.get_value("Payment Entry", d.reference_name, "mode_of_payment")
+				
+
 			advance_row = {
 				"doctype": self.doctype + " Advance",
 				"reference_type": d.reference_type,
 				"reference_name": d.reference_name,
 				"reference_row": d.reference_row,
 				"remarks": d.remarks,
+				"date_and_time": date_and_time or "",
+            	"mode_of_payment": mode_of_payment or "",
 				"advance_amount": flt(d.amount),
 				"allocated_amount": allocated_amount,
 				"ref_exchange_rate": flt(d.exchange_rate),  # exchange_rate of advance entry
