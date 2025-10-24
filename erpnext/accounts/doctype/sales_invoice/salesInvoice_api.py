@@ -1870,6 +1870,21 @@ def get_sales_details_with_patient_info():
                 item_data["item_name"] = f"{practitioner.op_consulting_charge_item} ({practitioner_name})"
             except frappe.DoesNotExistError:
                 item_data["item_name"] = "Inpatient Visit Charge (Unknown Practitioner)"
+                
+     # 🧠 Drug / Pharmacy Custom Name Logic
+        item_group_lower = (item.item_group or "").lower()
+        if "drug" in item_group_lower or "pharmacy" in item_group_lower:
+            try:
+                item_doc = frappe.get_doc("Item", item.item_code)
+                brand = item_doc.brand or "-"
+                manufacturer = item_doc.manufacturer or "-"
+                batch_number = getattr(item, "batch_no", None) or getattr(item_doc, "batch_number", None) or "-"
+                expiry_date = getattr(item, "expiry_date", None) or getattr(item_doc, "end_of_life", None) or "-"
+                # Format final item_name
+                item_data["item_name"] = f"{item.item_name} - {brand} - {manufacturer} - {batch_number} - {expiry_date}"
+            except Exception as e:
+                frappe.log_error(frappe.get_traceback(), "Drug Item Name Formatting Error")
+
 
         # --- GST Split (from item_tax_rate or item_tax_template) ---
         cgst_rate, sgst_rate, igst_rate = 0, 0, 0
