@@ -2010,9 +2010,13 @@ def get_sales_details_with_patient_info():
        
         financial_info["outstanding_amount"] = doc.outstanding_amount
         financial_info["paid_date"] = getattr(doc, "paid_date", None)
+        financial_info["posting_date"] = getattr(doc, "posting_date", None)
+        financial_info["posting_time"] = getattr(doc, "posting_time", None)
+        financial_info["due_date"] = getattr(doc, "due_date", None)
+
     
     financial_info["patient_payable"] = grand_total - advance
-    if str(doc.status).lower() == "paid":
+    if str(doc.status).lower() == "Paid":
         financial_info["patient_payable"] = 0
     
         # --- Linked Payment Entries ---
@@ -2032,6 +2036,7 @@ def get_sales_details_with_patient_info():
             payment_entries.append({
                 "name": pe.name,
                 "posting_date": pe.posting_date,
+                "date_and_time": pe.date_and_time,
                 "payment_type": pe.payment_type,
                 "party_type": pe.party_type,
                 "party": pe.party,
@@ -2054,9 +2059,7 @@ def get_sales_details_with_patient_info():
         "message": {
             "doctype": doctype,
             "name": doc.name,
-            "posting_date": doc.posting_date,
-            "posting_time": doc.posting_time,
-            "due_date": doc.due_date,
+            
             "status": doc.status,
             "customer_address": doc.customer_address,
             "address_display": doc.address_display,
