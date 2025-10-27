@@ -1943,6 +1943,23 @@ def get_sales_details_with_patient_info():
 
         items.append(item_data)
 
+        taxable_amount = 0
+        cgst_total = 0
+        sgst_total = 0
+        igst_total = 0
+
+        for i in items:
+            if i.get("cgst_amount") or i.get("sgst_amount") or i.get("igst_amount"):
+                taxable_amount += i.get("amount", 0)
+                cgst_total += i.get("cgst_amount", 0)
+                sgst_total += i.get("sgst_amount", 0)
+                igst_total += i.get("igst_amount", 0)
+
+        total_taxes = cgst_total + sgst_total + igst_total
+        net_amount = doc.total or 0
+        grand_total = doc.grand_total or 0
+
+    
     # Taxes
     taxes = []
     for tax in doc.taxes:
@@ -1971,17 +1988,32 @@ def get_sales_details_with_patient_info():
         "apply_discount_on": doc.apply_discount_on,
         "additional_discount_percentage": doc.additional_discount_percentage,
         "discount_amount": doc.discount_amount,
+        "net_amount": round(net_amount, 2),
+        "taxable_amount": round(taxable_amount, 2),
+        "cgst_total": round(cgst_total, 2),
+        "sgst_total": round(sgst_total, 2),
+        "igst_total": round(igst_total, 2),
+        "total_taxes": round(total_taxes, 2),
+        "grand_total": round(grand_total, 2),
+        
         
     }
-
+    advance=0
     if doctype == "Sales Order":
         financial_info["advance_paid"] = doc.advance_paid
+        advance=doc.advance_paid
+
     elif doctype == "Sales Invoice":
         financial_info["total_advance"] = doc.total_advance
+        advance=doc.total_advance
         financial_info["advances"] = doc.advances
        
         financial_info["outstanding_amount"] = doc.outstanding_amount
         financial_info["paid_date"] = getattr(doc, "paid_date", None)
+    
+    financial_info["patient_payable"] = grand_total - advance
+    if str(doc.status).lower() == "paid":
+        financial_info["patient_payable"] = 0
     
         # --- Linked Payment Entries ---
     payment_entries = []
