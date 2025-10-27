@@ -1805,6 +1805,8 @@ def get_sales_details_with_patient_info():
                 "name": doc.inpatient_record,
                 "scheduled_date": inpatient.scheduled_date,
                 "service_unit__ward": inpatient.service_unit__ward,
+                "bed_number": inpatient.bed_number,
+                "mou_billing": inpatient.mou_billing,
                 "primary_practitioner": inpatient.primary_practitioner,
                 "primary_healthcare_practitioner_name": inpatient.primary_healthcare_practitioner_name,
                 "medical_department": inpatient.medical_department,
@@ -1879,7 +1881,19 @@ def get_sales_details_with_patient_info():
                 brand = item_doc.brand or "-"
                 manufacturer = item_doc.manufacturer or "-"
                 batch_number = getattr(item, "batch_no", None) or getattr(item_doc, "batch_number", None) or "-"
-                expiry_date = getattr(item, "expiry_date", None) or getattr(item_doc, "end_of_life", None) or "-"
+                # expiry_date = getattr(item, "expiry_date", None) or getattr(item_doc, "end_of_life", None) or "-"
+                from datetime import datetime
+
+                expiry_date_raw = getattr(item, "expiry_date", None) or getattr(item_doc, "end_of_life", None)
+
+                if expiry_date_raw and expiry_date_raw != "-":
+                    try:
+                        expiry_date = datetime.strptime(str(expiry_date_raw), "%Y-%m-%d").strftime("%m / %y")
+                    except ValueError:
+                        expiry_date = "-"
+                else:
+                    expiry_date = "-"
+
                 # Format final item_name
                 item_data["item_name"] = f"{item.item_name} - {brand} - {manufacturer} - {batch_number} - {expiry_date}"
             except Exception as e:
@@ -1968,15 +1982,57 @@ def get_sales_details_with_patient_info():
        
         financial_info["outstanding_amount"] = doc.outstanding_amount
         financial_info["paid_date"] = getattr(doc, "paid_date", None)
+    
+        # --- Linked Payment Entries ---
+    payment_entries = []
+    try:
+        payment_refs = frappe.get_all(
+            "Payment Entry Reference",
+            filters={
+                "reference_doctype": doctype,
+                "reference_name": doc.name
+            },
+            fields=["parent"]
+        )
+
+        for ref in payment_refs:
+            pe = frappe.get_doc("Payment Entry", ref.parent)
+            payment_entries.append({
+                "name": pe.name,
+                "posting_date": pe.posting_date,
+                "payment_type": pe.payment_type,
+                "party_type": pe.party_type,
+                "party": pe.party,
+                "mode_of_payment": pe.mode_of_payment,
+                "paid_amount": pe.paid_amount,
+                "received_amount": pe.received_amount,
+                "reference_no": pe.reference_no,
+                "reference_date": pe.reference_date,
+                "remarks": pe.remarks,
+                "status": pe.docstatus,
+                "owner": pe.owner,
+                "creation": pe.creation,
+            })
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Error fetching Payment Entries")
+
+
 
     return {
         "message": {
             "doctype": doctype,
             "name": doc.name,
+            "posting_date": doc.posting_date,
+            "posting_time": doc.posting_time,
+            "due_date": doc.due_date,
+            "status": doc.status,
+            "customer_address": doc.customer_address,
+            "address_display": doc.address_display,
             "patient": patient_info,
             "inpatient_record": inpatient_info,
             "address": address_list,
             "items": items,
             "financials": financial_info,
+            "payment_entries": payment_entries,
         }
     }
