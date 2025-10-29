@@ -76,12 +76,12 @@ def get_all_journal_entries():
 
 # ✅ Get Journal Entry by ID
 @frappe.whitelist(allow_guest=False)
-def get_journal_entry(docname):
+def get_journal_entry(name):
     if not authenticate_user():
         return {"error": "Unauthorized"}
 
     try:
-        doc = frappe.get_doc("Journal Entry", docname)
+        doc = frappe.get_doc("Journal Entry", name)
         return doc.as_dict()
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Get Journal Entry by ID API")
@@ -90,7 +90,7 @@ def get_journal_entry(docname):
 
 # ✅ Update Journal Entry
 @frappe.whitelist(allow_guest=False)
-def update_journal_entry(docname):
+def update_journal_entry(name):
     if frappe.request.method != "PUT":
         frappe.local.response["http_status_code"] = 405
         return {"error": "Only PUT method allowed"}
@@ -100,7 +100,7 @@ def update_journal_entry(docname):
 
     data = frappe.request.get_json()
     try:
-        doc = frappe.get_doc("Journal Entry", docname)
+        doc = frappe.get_doc("Journal Entry", name)
         doc.update(data)
         doc.save(ignore_permissions=True)
         frappe.db.commit()
@@ -112,7 +112,7 @@ def update_journal_entry(docname):
 
 # ✅ Delete Journal Entry
 @frappe.whitelist(allow_guest=False)
-def delete_journal_entry(docname):
+def delete_journal_entry(name):
     if frappe.request.method != "DELETE":
         frappe.local.response["http_status_code"] = 405
         return {"error": "Only DELETE method allowed"}
@@ -121,9 +121,9 @@ def delete_journal_entry(docname):
         return {"error": "Unauthorized"}
 
     try:
-        frappe.delete_doc("Journal Entry", docname, ignore_permissions=True)
+        frappe.delete_doc("Journal Entry", name, ignore_permissions=True)
         frappe.db.commit()
-        return {"message": "Journal Entry deleted successfully", "name": docname}
+        return {"message": "Journal Entry deleted successfully", "name": name}
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Delete Journal Entry API")
         return {"error": str(e)}
@@ -166,12 +166,12 @@ def get_all_journal_entry_templates():
 
 # ✅ Get Journal Entry Template by ID
 @frappe.whitelist(allow_guest=False)
-def get_journal_entry_template(docname):
+def get_journal_entry_template(name):
     if not authenticate_user():
         return {"error": "Unauthorized"}
 
     try:
-        doc = frappe.get_doc("Journal Entry Template", docname)
+        doc = frappe.get_doc("Journal Entry Template", name)
         return doc.as_dict()
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Get Journal Entry Template by ID API")
@@ -180,7 +180,7 @@ def get_journal_entry_template(docname):
 
 # ✅ Update Journal Entry Template
 @frappe.whitelist(allow_guest=False)
-def update_journal_entry_template(docname):
+def update_journal_entry_template(name):
     if frappe.request.method != "PUT":
         frappe.local.response["http_status_code"] = 405
         return {"error": "Only PUT method allowed"}
@@ -190,7 +190,7 @@ def update_journal_entry_template(docname):
 
     data = frappe.request.get_json()
     try:
-        doc = frappe.get_doc("Journal Entry Template", docname)
+        doc = frappe.get_doc("Journal Entry Template", name)
         doc.update(data)
         doc.save(ignore_permissions=True)
         frappe.db.commit()
@@ -202,7 +202,7 @@ def update_journal_entry_template(docname):
 
 # ✅ Delete Journal Entry Template
 @frappe.whitelist(allow_guest=False)
-def delete_journal_entry_template(docname):
+def delete_journal_entry_template(name):
     if frappe.request.method != "DELETE":
         frappe.local.response["http_status_code"] = 405
         return {"error": "Only DELETE method allowed"}
@@ -211,9 +211,9 @@ def delete_journal_entry_template(docname):
         return {"error": "Unauthorized"}
 
     try:
-        frappe.delete_doc("Journal Entry Template", docname, ignore_permissions=True)
+        frappe.delete_doc("Journal Entry Template", name, ignore_permissions=True)
         frappe.db.commit()
-        return {"message": "Journal Entry Template deleted successfully", "name": docname}
+        return {"message": "Journal Entry Template deleted successfully", "name": name}
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Delete Journal Entry Template API")
         return {"error": str(e)}
