@@ -1181,7 +1181,7 @@ def get_list_api(doctype):
     try:
         # Pagination
         limit_start = int(frappe.form_dict.get("limit_start", 0))
-        raw_limit = frappe.form_dict.get("limit_page_length", 10)
+        raw_limit = frappe.form_dict.get("limit_page_length", 10000)
  
         total = frappe.db.count(doctype)
         if str(raw_limit).lower() in ("0", "all"):
