@@ -608,3 +608,28 @@ def create_invoice_from_source():
         frappe.log_error(frappe.get_traceback(), "Create Purchase Invoice from Source API")
         frappe.local.response["http_status_code"] = 500
         return {"error": str(e)}
+
+@frappe.whitelist(allow_guest=True)
+def purchase_invoices_list():
+    if frappe.request.method != "GET":
+        frappe.local.response["http_status_code"] = 405
+        return {"error": "Only GET method allowed"}
+
+    if not authenticate_user():
+        return {"error": "Unauthorized"}
+
+    try:
+        invoices = frappe.get_all(
+            "Purchase Invoice",
+            fields=[
+                "title","name", "supplier", "posting_date", "due_date", "is_paid",
+                "grand_total", "currency", "status", "company"
+            ],
+            order_by="posting_date desc",
+        )
+        return {"message": invoices}
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "List Purchase Invoice API")
+        frappe.local.response["http_status_code"] = 500
+        return {"error": str(e)}
