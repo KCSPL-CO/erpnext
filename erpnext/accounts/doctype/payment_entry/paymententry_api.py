@@ -224,6 +224,7 @@ def createPaymentEntry():
         data = frappe.request.get_json()
 
         party = data.get("party")
+        party_type = data.get("party_type")
         payment_type = data.get("payment_type")
         paid_amount = data.get("paid_amount")
         posting_date = data.get("posting_date")
@@ -232,17 +233,16 @@ def createPaymentEntry():
         reference_name = data.get("reference_name")
         remarks = data.get("remarks")
 
-        if not all([party, payment_type, paid_amount, posting_date, mode_of_payment]):
+        # Required fields validation
+        if not all([party, party_type, payment_type, paid_amount, posting_date, mode_of_payment]):
             frappe.local.response["http_status_code"] = 400
             return {"error": "Missing required fields"}
 
-        # Get customer details
-        party_name = frappe.db.get_value("Customer", {"name": party}, "customer_name")
-        if not party_name:
-            frappe.throw(_("Customer not found"))
-
-        # Set default naming series
+        # -------------------------------------------------
+        # NAMING SERIES LOGIC
+        # -------------------------------------------------
         naming_series = "ACC-PAY-.YYYY.-"
+
         if reference_type == "Sales Invoice" and reference_name:
             if reference_name.startswith("LAB-SINV-"):
                 naming_series = "ACC-LAB-PAY-.YYYY.-"
@@ -261,28 +261,55 @@ def createPaymentEntry():
             elif reference_name.startswith("DEMO-SINV-"):
                 naming_series = "ACC-DEMO-PAY-.YYYY.-"
 
-        # Create payment entry
+        # -------------------------------------------------
+        # CREATE PAYMENT ENTRY
+        # -------------------------------------------------
         pe = frappe.new_doc("Payment Entry")
         pe.naming_series = naming_series
         pe.payment_type = payment_type
         pe.posting_date = posting_date
         pe.mode_of_payment = mode_of_payment
-        pe.party_type = "Customer"
+        pe.party_type = party_type
         pe.party = party
-        pe.party_name = party_name
+        pe.party_name = party  # Directly use given name
         pe.paid_amount = paid_amount
         pe.received_amount = paid_amount
         pe.remarks = remarks
         pe.company = frappe.defaults.get_user_default("Company") or "HIMS (Demo)"
 
-        # Get default accounts
-        pe.paid_from = frappe.db.get_value("Account", {"account_type": "Receivable", "company": pe.company}, "name")
-        pe.paid_to = frappe.db.get_value("Account", {"account_type": "Cash", "company": pe.company}, "name")
+        # -------------------------------------------------
+        # ACCOUNT LOGIC BASED ON PAYMENT TYPE
+        # -------------------------------------------------
+        if payment_type == "Receive":
+            pe.paid_from = frappe.db.get_value(
+                "Account",
+                {"account_type": "Receivable", "company": pe.company},
+                "name"
+            )
+            pe.paid_to = frappe.db.get_value(
+                "Account",
+                {"account_type": "Cash", "company": pe.company},
+                "name"
+            )
+
+        elif payment_type == "Pay":
+            pe.paid_from = frappe.db.get_value(
+                "Account",
+                {"account_type": "Cash", "company": pe.company},
+                "name"
+            )
+            pe.paid_to = frappe.db.get_value(
+                "Account",
+                {"account_type": "Payable", "company": pe.company},
+                "name"
+            )
 
         if not pe.paid_from or not pe.paid_to:
-            frappe.throw(_("Default Cash or Receivable account not found."))
+            frappe.throw(_("Required accounts not found."))
 
-        # Link reference (if any)
+        # -------------------------------------------------
+        # REFERENCE LINKING
+        # -------------------------------------------------
         if reference_type and reference_name:
             pe.append("references", {
                 "reference_doctype": reference_type,
@@ -293,7 +320,10 @@ def createPaymentEntry():
         pe.insert(ignore_permissions=True)
         pe.submit()
 
-        return {"message": "Payment Entry created", "payment_entry": pe.name}
+        return {
+            "message": "Payment Entry created",
+            "payment_entry": pe.name
+        }
 
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Create Payment Entry API")
